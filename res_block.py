@@ -17,7 +17,7 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         x_temp = self.conv1(x)
-        x_temp = self.relu(x_temp)
+        x_temp = self.relu1(x_temp)
         x_temp = self.conv2(x_temp)
         x = torch.add(x_temp, x)
         x = self.relu2(x)

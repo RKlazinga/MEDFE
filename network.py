@@ -18,8 +18,10 @@ class MEDFE(nn.Module):
         self.conv5 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.conv6 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
 
-        # TODO res block
-        self.res_block = ResBlock(512, 512, kernel_size=(4, 4), dilation=(2, 2))
+        self.res_block1 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
+        self.res_block2 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
+        self.res_block3 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
+        self.res_block4 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
 
         self.deconv5 = nn.ConvTranspose2d(1024, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv4 = nn.ConvTranspose2d(1024, 256, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -28,23 +30,28 @@ class MEDFE(nn.Module):
         self.deconv1 = nn.ConvTranspose2d(128, 4, (4, 4), stride=(2, 2), padding=(1, 1))
 
     def forward(self, x):
-        x1 = self.conv1.forward(x)
-        x2 = self.conv2.forward(x1)
-        x3 = self.conv3.forward(x2)
-        x4 = self.conv4.forward(x3)
-        x5 = self.conv5.forward(x4)
-        x6 = self.conv6.forward(x5)
+        x1 = self.conv1(x)
+        x2 = self.conv2(x1)
+        x3 = self.conv3(x2)
+        x4 = self.conv4(x3)
+        x5 = self.conv5(x4)
+        x6 = self.conv6(x5)
 
-        #TODO apply res block to x6
-        # - output should have same shape as x5
-        x_res = self.res_block.forward(x6)
+        # TODO: apply res block to x6 instead of x5
+        #  Because the output should have the same size as x5, just use x5 here until we can figure out what the paper
+        #  is doing...
+        x_res = x5
+        x_res = self.res_block1(x_res)
+        x_res = self.res_block2(x_res)
+        x_res = self.res_block3(x_res)
+        x_res = self.res_block4(x_res)
 
-        x5c = torch.cat((x_res, x5), dim=1)
-        y5 = self.deconv5.forward(x5c)
-        y4 = self.deconv4.forward(torch.cat((y5, x4), dim=1))
-        y3 = self.deconv3.forward(torch.cat((y4, x3), dim=1))
-        y2 = self.deconv2.forward(torch.cat((y3, x2), dim=1))
-        y1 = self.deconv1.forward(torch.cat((y2, x1), dim=1))
+        y5 = self.deconv5(torch.cat((x_res, x5), dim=1))
+        y4 = self.deconv4(torch.cat((y5, x4), dim=1))
+        y3 = self.deconv3(torch.cat((y4, x3), dim=1))
+        y2 = self.deconv2(torch.cat((y3, x2), dim=1))
+        y1 = self.deconv1(torch.cat((y2, x1), dim=1))
+
         return y1
 
 
