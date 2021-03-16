@@ -39,7 +39,13 @@ class MEDFE(nn.Module):
         y2 = self.deconv2.forward(torch.cat((y3, x2)))
         y1 = self.deconv1.forward(torch.cat((y2, x1)))
 
-medfe = MEDFE()
-writer = tensorboard.SummaryWriter("tensorboard_logs")
-writer.add_graph(medfe)
-writer.close()
+
+def main():
+    medfe = MEDFE()
+    writer = tensorboard.SummaryWriter("tensorboard_logs")
+    writer.add_graph(medfe)
+    writer.close()
+
+
+if __name__ == '__main__':
+    main()
