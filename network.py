@@ -4,6 +4,8 @@ from torch.utils import tensorboard, data
 from PIL import Image
 import numpy as np
 
+from res_block import ResBlock
+
 
 class MEDFE(nn.Module):
     def __init__(self):
@@ -17,6 +19,7 @@ class MEDFE(nn.Module):
         self.conv6 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
 
         # TODO res block
+        self.res_block = ResBlock(512, 512, kernel_size=(4, 4), dilation=(2, 2))
 
         self.deconv5 = nn.ConvTranspose2d(1024, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv4 = nn.ConvTranspose2d(1024, 256, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -34,7 +37,7 @@ class MEDFE(nn.Module):
 
         #TODO apply res block to x6
         # - output should have same shape as x5
-        x_res = torch.tensor(x5)
+        x_res = self.res_block.forward(x6)
 
         x5c = torch.cat((x_res, x5), dim=1)
         y5 = self.deconv5.forward(x5c)
@@ -46,13 +49,17 @@ class MEDFE(nn.Module):
 
 
 def main():
-    im = torch.tensor(np.array(Image.open("trial_image.png").convert("RGB")))
-    im = torch.movedim(im, 2, 0)
-    mask = torch.reshape(torch.tensor(np.array(Image.open("30000.png").convert("L"))), (256, 256, 1))
-    mask = torch.movedim(mask, 2, 0)
+    mask = np.array(Image.open("30000.png").convert("L"))
+    mask[mask <= 128] = 0
+    mask[mask > 128] = 255
 
-    x = torch.cat((im, mask), dim=0).float()
-    train_loader = data.DataLoader([x], batch_size=1, shuffle=True, num_workers=1)
+    im = np.array(Image.open("trial_image.png").convert("RGB"))
+    im[mask == 0, :] = 0
+
+    sample = torch.cat((torch.tensor(im), torch.tensor(mask.reshape(256, 256, 1))), dim=2)
+    sample = torch.movedim(sample, 2, 0).float()
+
+    train_loader = data.DataLoader([sample], batch_size=1, shuffle=True, num_workers=1)
 
     medfe = MEDFE()
     writer = tensorboard.SummaryWriter("tensorboard_logs")
