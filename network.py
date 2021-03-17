@@ -4,6 +4,7 @@ from torch.utils import tensorboard, data
 from PIL import Image
 import numpy as np
 
+from branch import Branch
 from res_block import ResBlock
 
 
@@ -22,6 +23,10 @@ class MEDFE(nn.Module):
         self.res_block2 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
         self.res_block3 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
         self.res_block4 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
+
+        self.texture_branch = Branch()
+        self.structure_branch = Branch()
+        self.branch_combiner = nn.Conv2d(kernel_size=(1, 1))
 
         self.deconv5 = nn.ConvTranspose2d(1024, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv4 = nn.ConvTranspose2d(1024, 256, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -45,6 +50,18 @@ class MEDFE(nn.Module):
         x_res = self.res_block2(x_res)
         x_res = self.res_block3(x_res)
         x_res = self.res_block4(x_res)
+
+        f_fst = self.texture_branch(x1, x2, x3)
+        f_fte = self.structure_branch(x4, x5, x6)
+
+        # concatenate and combine branches
+        f_sf = self.branch_combiner(torch.cat((f_fst, f_fte)))
+
+        # TODO apply channel equalization
+
+        # TODO apply spatial equalization
+
+        # TODO elementwise_add the outcome to all skip connections
 
         y5 = self.deconv5(torch.cat((x_res, x5), dim=1))
         y4 = self.deconv4(torch.cat((y5, x4), dim=1))
