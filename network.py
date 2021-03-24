@@ -45,11 +45,14 @@ class MEDFE(nn.Module):
         # TODO: apply res block to x6 instead of x5
         #  Because the output should have the same size as x5, just use x5 here until we can figure out what the paper
         #  is doing...
-        x_res = x5
-        x_res = self.res_block1(x_res)
-        x_res = self.res_block2(x_res)
-        x_res = self.res_block3(x_res)
-        x_res = self.res_block4(x_res)
+        x_res1 = self.res_block1(x6)
+        x_res2 = self.res_block2(x6)
+        x_res3 = self.res_block3(x6)
+        x_res4 = self.res_block4(x6)
+
+        x_res_cat1 = torch.cat((x_res1, x_res2), dim=2)
+        x_res_cat2 = torch.cat((x_res3, x_res4), dim=2)
+        x_res = torch.cat((x_res_cat1, x_res_cat2), dim=3)
 
         f_fst = self.texture_branch(x1, x2, x3)
         f_fte = self.structure_branch(x4, x5, x6)
