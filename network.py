@@ -44,8 +44,9 @@ class MEDFE(nn.Module):
         self.branch_scale_2 = nn.Upsample((64, 64))
         self.branch_scale_1 = nn.Upsample((128, 128))
 
-        self.deconv5 = nn.ConvTranspose2d(1024, 512, (4, 4), stride=(2, 2), padding=(1, 1))
-        self.deconv4 = nn.ConvTranspose2d(1024, 256, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.deconv6 = nn.ConvTranspose2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.deconv5 = nn.ConvTranspose2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.deconv4 = nn.ConvTranspose2d(512, 256, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv3 = nn.ConvTranspose2d(512, 128, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv2 = nn.ConvTranspose2d(256, 64, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv1 = nn.ConvTranspose2d(128, 4, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -58,16 +59,10 @@ class MEDFE(nn.Module):
         x5 = self.conv5(x4)
         x6 = self.conv6(x5)
 
-        # The paper is vague so we arrange the blocks in parallel and concatenate them in both dimensions to an
-        # 8x8 tensor
         x_res1 = self.res_block1(x6)
-        x_res2 = self.res_block2(x6)
-        x_res3 = self.res_block3(x6)
-        x_res4 = self.res_block4(x6)
-
-        x_res_cat1 = torch.cat((x_res1, x_res2), dim=2)
-        x_res_cat2 = torch.cat((x_res3, x_res4), dim=2)
-        x_res = torch.cat((x_res_cat1, x_res_cat2), dim=3)
+        x_res2 = self.res_block2(x_res1)
+        x_res3 = self.res_block3(x_res2)
+        x_res4 = self.res_block4(x_res3)
 
         # texture branch: scale x1, x2 and x3 to 32x32
         tex_branch_input = torch.cat((
@@ -95,14 +90,15 @@ class MEDFE(nn.Module):
         # TODO apply spatial equalization
 
         # TODO elementwise_add the outcome to all skip connections
-        x_res = x_res + self.branch_scale_6(f_sf)
+        x_res = x_res4 + self.branch_scale_6(f_sf)
         x5_skip = x5 + self.branch_scale_5(f_sf)
         x4_skip = x4 + self.branch_scale_4(f_sf)
         x3_skip = x3 + self.branch_scale_3(f_sf)
         x2_skip = x2 + self.branch_scale_2(f_sf)
         x1_skip = x1 + self.branch_scale_1(f_sf)
 
-        y5 = self.deconv5(torch.cat((x_res, x5_skip), dim=1))
+        y6 = self.deconv6(x_res)
+        y5 = self.deconv5(torch.cat((y6, x5_skip), dim=1))
         y4 = self.deconv4(torch.cat((y5, x4_skip), dim=1))
         y3 = self.deconv3(torch.cat((y4, x3_skip), dim=1))
         y2 = self.deconv2(torch.cat((y3, x2_skip), dim=1))
