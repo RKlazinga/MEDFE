@@ -42,9 +42,8 @@ class MEDFE(nn.Module):
         x5 = self.conv5(x4)
         x6 = self.conv6(x5)
 
-        # TODO: apply res block to x6 instead of x5
-        #  Because the output should have the same size as x5, just use x5 here until we can figure out what the paper
-        #  is doing...
+        # The paper is vague so we arrange the blocks in parallel and concatenate them in both dimensions to an
+        # 8x8 tensor
         x_res1 = self.res_block1(x6)
         x_res2 = self.res_block2(x6)
         x_res3 = self.res_block3(x6)
