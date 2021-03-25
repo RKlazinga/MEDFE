@@ -35,22 +35,22 @@ class Branch(nn.Module):
         self.stream3_4 = PartialConv2d(kernel_size=(3, 3))
         self.stream3_5 = PartialConv2d(kernel_size=(3, 3))
 
-        self.combining_conv = nn.Conv2d(kernel_size=(1,1))
+        self.combining_conv = nn.Conv2d(kernel_size=(1, 1))
 
-    def forward(self, stream_7, stream_5, stream_3):
-        stream_7 = self.stream7_1(stream_7)
+    def forward(self, f):
+        stream_7 = self.stream7_1(f)
         stream_7 = self.stream7_2(stream_7)
         stream_7 = self.stream7_3(stream_7)
         stream_7 = self.stream7_4(stream_7)
         stream_7 = self.stream7_5(stream_7)
 
-        stream_5 = self.stream5_1(stream_5)
+        stream_5 = self.stream5_1(f)
         stream_5 = self.stream5_2(stream_5)
         stream_5 = self.stream5_3(stream_5)
         stream_5 = self.stream5_4(stream_5)
         stream_5 = self.stream5_5(stream_5)
 
-        stream_3 = self.stream3_1(stream_3)
+        stream_3 = self.stream3_1(f)
         stream_3 = self.stream3_2(stream_3)
         stream_3 = self.stream3_3(stream_3)
         stream_3 = self.stream3_4(stream_3)
