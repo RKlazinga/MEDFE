@@ -14,47 +14,52 @@ class Branch(nn.Module):
     with the same kernel size while the kernel size differs among different streams.
     """
 
-    def __init__(self):
+    def __init__(self, input_size):
         super().__init__()
+        self.mask = None
+        self.input_size = input_size
 
-        self.stream7_1 = PartialConv2d(kernel_size=(7, 7))
-        self.stream7_2 = PartialConv2d(kernel_size=(7, 7))
-        self.stream7_3 = PartialConv2d(kernel_size=(7, 7))
-        self.stream7_4 = PartialConv2d(kernel_size=(7, 7))
-        self.stream7_5 = PartialConv2d(kernel_size=(7, 7))
+        self.stream7_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.stream7_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.stream7_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.stream7_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.stream7_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
 
-        self.stream5_1 = PartialConv2d(kernel_size=(5, 5))
-        self.stream5_2 = PartialConv2d(kernel_size=(5, 5))
-        self.stream5_3 = PartialConv2d(kernel_size=(5, 5))
-        self.stream5_4 = PartialConv2d(kernel_size=(5, 5))
-        self.stream5_5 = PartialConv2d(kernel_size=(5, 5))
+        self.stream5_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.stream5_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.stream5_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.stream5_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.stream5_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
 
-        self.stream3_1 = PartialConv2d(kernel_size=(3, 3))
-        self.stream3_2 = PartialConv2d(kernel_size=(3, 3))
-        self.stream3_3 = PartialConv2d(kernel_size=(3, 3))
-        self.stream3_4 = PartialConv2d(kernel_size=(3, 3))
-        self.stream3_5 = PartialConv2d(kernel_size=(3, 3))
+        self.stream3_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.stream3_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.stream3_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.stream3_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.stream3_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
 
-        self.combining_conv = nn.Conv2d(kernel_size=(1, 1))
+        self.combining_conv = nn.Conv2d(3 * self.input_size, self.input_size, kernel_size=(1, 1))
+
+    def set_mask(self, mask):
+        self.mask = mask
 
     def forward(self, f):
-        stream_7 = self.stream7_1(f)
-        stream_7 = self.stream7_2(stream_7)
-        stream_7 = self.stream7_3(stream_7)
-        stream_7 = self.stream7_4(stream_7)
-        stream_7 = self.stream7_5(stream_7)
+        stream_7 = self.stream7_1(f, mask_in=self.mask)
+        stream_7 = self.stream7_2(stream_7, mask_in=self.mask)
+        stream_7 = self.stream7_3(stream_7, mask_in=self.mask)
+        stream_7 = self.stream7_4(stream_7, mask_in=self.mask)
+        stream_7 = self.stream7_5(stream_7, mask_in=self.mask)
 
-        stream_5 = self.stream5_1(f)
-        stream_5 = self.stream5_2(stream_5)
-        stream_5 = self.stream5_3(stream_5)
-        stream_5 = self.stream5_4(stream_5)
-        stream_5 = self.stream5_5(stream_5)
+        stream_5 = self.stream5_1(f, mask_in=self.mask)
+        stream_5 = self.stream5_2(stream_5, mask_in=self.mask)
+        stream_5 = self.stream5_3(stream_5, mask_in=self.mask)
+        stream_5 = self.stream5_4(stream_5, mask_in=self.mask)
+        stream_5 = self.stream5_5(stream_5, mask_in=self.mask)
 
-        stream_3 = self.stream3_1(f)
-        stream_3 = self.stream3_2(stream_3)
-        stream_3 = self.stream3_3(stream_3)
-        stream_3 = self.stream3_4(stream_3)
-        stream_3 = self.stream3_5(stream_3)
+        stream_3 = self.stream3_1(f, mask_in=self.mask)
+        stream_3 = self.stream3_2(stream_3, mask_in=self.mask)
+        stream_3 = self.stream3_3(stream_3, mask_in=self.mask)
+        stream_3 = self.stream3_4(stream_3, mask_in=self.mask)
+        stream_3 = self.stream3_5(stream_3, mask_in=self.mask)
 
-        concat = torch.cat((stream_3, stream_5, stream_7))
+        concat = torch.cat((stream_3, stream_5, stream_7), dim=1)
         return self.combining_conv(concat)
