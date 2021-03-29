@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from partial_conv import PartialConv2d
 
@@ -18,8 +19,6 @@ class Branch(nn.Module):
         super().__init__()
         self.mask = None
         self.input_size = input_size
-
-        self.mask_downscale = nn.Conv2d(1, 1, (8, 8), stride=8)
 
         self.stream7_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
         self.stream7_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
@@ -42,9 +41,9 @@ class Branch(nn.Module):
         self.combining_conv = nn.Conv2d(3 * self.input_size, self.input_size, kernel_size=(1, 1))
 
     def set_mask(self, mask):
-        self.mask = mask.reshape(1, 1, 256, 256).float()
-        with torch.no_grad():
-            self.mask = self.mask_downscale(self.mask)
+        print(mask.reshape(1, 1, 256, 256).float().shape)
+        self.mask = F.interpolate(mask.reshape(1, 1, 256, 256).float(), size=(32, 32))
+        print(self.mask.shape)
 
     def forward(self, f):
         stream_7 = self.stream7_1(f, mask_in=self.mask)
