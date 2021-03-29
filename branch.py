@@ -41,9 +41,7 @@ class Branch(nn.Module):
         self.combining_conv = nn.Conv2d(3 * self.input_size, self.input_size, kernel_size=(1, 1))
 
     def set_mask(self, mask):
-        print(mask.reshape(1, 1, 256, 256).float().shape)
         self.mask = F.interpolate(mask.reshape(1, 1, 256, 256).float(), size=(32, 32))
-        print(self.mask.shape)
 
     def forward(self, f):
         stream_7 = self.stream7_1(f, mask_in=self.mask)
