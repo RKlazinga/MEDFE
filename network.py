@@ -6,10 +6,11 @@ import numpy as np
 
 from branch import Branch
 from res_block import ResBlock
+from bpa import Bpa
 
 
 class MEDFE(nn.Module):
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__()
 
         self.conv1 = nn.Conv2d(4, 64, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -38,6 +39,8 @@ class MEDFE(nn.Module):
         self.structure_branch = Branch(512)
 
         self.branch_combiner = nn.Conv2d(2 * 512, 512, kernel_size=(1, 1))
+
+        self.bpa = Bpa((1, 512, 32, 32))
 
         self.branch_scale_6 = nn.Conv2d(512, 512, kernel_size=(8, 8), stride=(8, 8))
         self.branch_scale_5 = nn.Conv2d(512, 512, kernel_size=(4, 4), stride=(4, 4))
@@ -95,6 +98,8 @@ class MEDFE(nn.Module):
 
         # TODO apply spatial equalization
 
+        f_sf = self.bpa(f_sf)
+
         # TODO elementwise_add the outcome to all skip connections
         x_res = x_res4 + self.branch_scale_6(f_sf)
         x5_skip = x5 + self.branch_scale_5(f_sf)
@@ -126,7 +131,7 @@ def main():
 
     train_loader = data.DataLoader([sample], batch_size=1, shuffle=True, num_workers=1)
 
-    medfe = MEDFE()
+    medfe = MEDFE(next(iter(train_loader)).shape)
     medfe.set_mask(torch.tensor(mask))
     writer = tensorboard.SummaryWriter("tensorboard_logs")
 
