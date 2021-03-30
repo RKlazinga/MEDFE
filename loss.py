@@ -1,5 +1,9 @@
+from collections import namedtuple
+
 from torch import nn
 from torchvision import transforms
+
+from network import MEDFE
 
 LAMBDA = {
     "reconstruction_out": 1,
@@ -10,6 +14,25 @@ LAMBDA = {
     "adversarial": 0.2
 }
 to_tensor = transforms.ToTensor()
+
+
+class PerceptualLoss(nn.Module):
+    """
+    https://github.com/ceshine/fast-neural-style --> loss_network.py
+    """
+
+    def __init__(self, model: MEDFE):
+        super().__init__()
+        self.model = model
+
+    def forward(self, i_gt, i_out):
+        # TODO capture activation of model on both images
+        loss = 0
+        # self.model.relu1
+        # self.model.relu2
+        # self.model.relu3
+        # self.model.relu4
+        # self.model.relu5
 
 
 class TotalLoss(nn.Module):

@@ -15,11 +15,17 @@ class MEDFE(nn.Module):
         super().__init__()
 
         self.conv1 = nn.Conv2d(4, 64, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv2d(64, 128, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu2 = nn.ReLU()
         self.conv3 = nn.Conv2d(128, 256, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu3 = nn.ReLU()
         self.conv4 = nn.Conv2d(256, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu4 = nn.ReLU()
         self.conv5 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu5 = nn.ReLU()
         self.conv6 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu6 = nn.ReLU()
 
         self.res_block1 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
         self.res_block2 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
