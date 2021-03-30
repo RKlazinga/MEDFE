@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 
 from branch import Branch
+from preprocess import preproc_img
 from res_block import ResBlock
 from bpa import Bpa
 
@@ -119,15 +120,7 @@ class MEDFE(nn.Module):
 
 
 def main():
-    mask = np.array(Image.open("30000.png").convert("L"))
-    mask[mask <= 128] = 0
-    mask[mask > 128] = 255
-
-    im = np.array(Image.open("trial_image.png").convert("RGB"))
-    im[mask == 0, :] = 0
-
-    sample = torch.cat((torch.tensor(im), torch.tensor(mask.reshape(256, 256, 1))), dim=2)
-    sample = torch.movedim(sample, 2, 0).float()
+    mask, sample = preproc_img("trial_image.png", "30000.png")
 
     train_loader = data.DataLoader([sample], batch_size=1, shuffle=True, num_workers=1)
 
