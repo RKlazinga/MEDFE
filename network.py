@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 
 from branch import Branch
+from loss import TotalLoss
 from preprocess import preproc_img
 from res_block import ResBlock
 from bpa import Bpa
@@ -16,14 +17,24 @@ class MEDFE(nn.Module):
 
         self.conv1 = nn.Conv2d(4, 64, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu1 = nn.ReLU()
+        self.relu1_cache = None
+
         self.conv2 = nn.Conv2d(64, 128, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu2 = nn.ReLU()
+        self.relu2_cache = None
+
         self.conv3 = nn.Conv2d(128, 256, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu3 = nn.ReLU()
+        self.relu3_cache = None
+
         self.conv4 = nn.Conv2d(256, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu4 = nn.ReLU()
+        self.relu4_cache = None
+
         self.conv5 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu5 = nn.ReLU()
+        self.relu5_cache = None
+
         self.conv6 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu6 = nn.ReLU()
 
@@ -129,6 +140,11 @@ def main():
     mask, sample = preproc_img("trial_image.png", "30000.png")
 
     train_loader = data.DataLoader([sample], batch_size=1, shuffle=True, num_workers=1)
+
+    model = MEDFE()
+
+    loss = TotalLoss()
+
 
     medfe = MEDFE(next(iter(train_loader)).shape)
     medfe.set_mask(torch.tensor(mask))
