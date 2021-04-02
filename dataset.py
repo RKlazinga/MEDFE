@@ -23,7 +23,7 @@ class CustomDataset(data.Dataset):
         img_path = f"{self.img_dir}/{name}"
 
         unmasked_img = self.scale(Image.open(f"{self.img_dir}/{name}").convert("RGB"))
-        unmasked_smooth_img = self.scale(Image.open(f"{self.smooth_dir}/{name}").convert("RGB"))
+        unmasked_smooth_img = self.scale(Image.open(f"{self.smooth_dir}/{name}").convert("RGB"), 32)
         mask, masked_img_tensor = self.preproc_img(img_path, None)
 
         sample = {
@@ -35,14 +35,14 @@ class CustomDataset(data.Dataset):
         return sample
 
     @staticmethod
-    def scale(im: Image.Image):
+    def scale(im: Image.Image, size=256):
         # reshape im to be square
         if im.height > im.width:
             im = im.crop((0, int((im.height - im.width)/2), im.width, im.height - int((im.height - im.width)/2)))
         elif im.width > im.height:
             im = im.crop((int((im.width - im.height)/2), 0, im.width - int((im.width - im.height)/2), im.height))
 
-        return im.resize((256, 256), resample=Image.BILINEAR)
+        return im.resize((size, size), resample=Image.BILINEAR)
 
     @staticmethod
     def preproc_img(img_path, mask_path=None):

@@ -1,18 +1,16 @@
-from torch import nn
+import os
+
+from torch import nn, optim
 import torch
-from torch.utils import tensorboard, data
-from PIL import Image
-import numpy as np
+
 
 from branch import Branch
-from loss import TotalLoss
-from preprocess import preproc_img
 from res_block import ResBlock
 from bpa import Bpa
 
 
 class MEDFE(nn.Module):
-    def __init__(self, input_shape):
+    def __init__(self):
         super().__init__()
 
         self.conv1 = nn.Conv2d(4, 64, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -48,13 +46,16 @@ class MEDFE(nn.Module):
         self.tex_branch_downscale_3 = nn.Conv2d(256, 512, kernel_size=(1, 1))
         self.tex_branch_combine = nn.Conv2d(3*512, 512, kernel_size=(1, 1))
         self.texture_branch = Branch(512)
+        self.tex_branch_to_img = nn.Conv2d(512, 3, kernel_size=(1,1))
+        self.tex_branch_img = None
 
         self.struct_branch_upscale_4 = nn.ConvTranspose2d(512, 512, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
         self.struct_branch_upscale_5 = nn.ConvTranspose2d(512, 512, kernel_size=(4, 4), stride=(4, 4))
         self.struct_branch_upscale_6 = nn.ConvTranspose2d(512, 512, kernel_size=(8, 8), stride=(8, 8))
         self.struct_branch_combine = nn.Conv2d(3 * 512, 512, kernel_size=(1, 1))
-
         self.structure_branch = Branch(512)
+        self.struct_branch_to_img = nn.Conv2d(512, 3, kernel_size=(1,1))
+        self.struct_branch_img = None
 
         self.branch_combiner = nn.Conv2d(2 * 512, 512, kernel_size=(1, 1))
 
@@ -79,12 +80,17 @@ class MEDFE(nn.Module):
         self.structure_branch.set_mask(mask)
 
     def forward(self, x):
-        x1 = self.conv1(x)
-        x2 = self.conv2(x1)
-        x3 = self.conv3(x2)
-        x4 = self.conv4(x3)
-        x5 = self.conv5(x4)
-        x6 = self.conv6(x5)
+        x1 = self.relu1(self.conv1(x))
+        self.relu1_cache = x1.clone()
+        x2 = self.relu2(self.conv2(x1))
+        self.relu2_cache = x2.clone()
+        x3 = self.relu3(self.conv3(x2))
+        self.relu3_cache = x3.clone()
+        x4 = self.relu4(self.conv4(x3))
+        self.relu4_cache = x4.clone()
+        x5 = self.relu5(self.conv5(x4))
+        self.relu5_cache = x5.clone()
+        x6 = self.relu6(self.conv6(x5))
 
         x_res1 = self.res_block1(x6)
         x_res2 = self.res_block2(x_res1)
@@ -99,6 +105,7 @@ class MEDFE(nn.Module):
         ), dim=1)
         tex_branch_input = self.tex_branch_combine(tex_branch_input)
         f_fte = self.texture_branch(tex_branch_input)
+        self.tex_branch_img = self.tex_branch_to_img(f_fte)
 
         # structure branch: upscale x4, x5 and x6 to 32x32
         struct_branch_input = torch.cat((
@@ -108,17 +115,13 @@ class MEDFE(nn.Module):
         ), dim=1)
         struct_branch_input = self.struct_branch_combine(struct_branch_input)
         f_fst = self.structure_branch(struct_branch_input)
+        self.struct_branch_img = self.struct_branch_to_img(f_fst)
 
         # concatenate and combine branches
         f_sf = self.branch_combiner(torch.cat((f_fst, f_fte), dim=1))
 
-        # TODO apply channel equalization
-
-        # TODO apply spatial equalization
-
         f_sf = self.bpa(f_sf)
 
-        # TODO elementwise_add the outcome to all skip connections
         x_res = x_res4 + self.branch_scale_6(f_sf)
         x5_skip = x5 + self.branch_scale_5(f_sf)
         x4_skip = x4 + self.branch_scale_4(f_sf)
@@ -126,6 +129,7 @@ class MEDFE(nn.Module):
         x2_skip = x2 + self.branch_scale_2(f_sf)
         x1_skip = x1 + self.branch_scale_1(f_sf)
 
+        # TODO relu deconvolutions!
         y6 = self.deconv6(x_res)
         y5 = self.deconv5(torch.cat((y6, x5_skip), dim=1))
         y4 = self.deconv4(torch.cat((y5, x4_skip), dim=1))
@@ -136,23 +140,3 @@ class MEDFE(nn.Module):
         return y1
 
 
-def main():
-    mask, sample = preproc_img("trial_image.png", "30000.png")
-
-    train_loader = data.DataLoader([sample], batch_size=1, shuffle=True, num_workers=1)
-
-    model = MEDFE()
-
-    loss = TotalLoss()
-
-
-    medfe = MEDFE(next(iter(train_loader)).shape)
-    medfe.set_mask(torch.tensor(mask))
-    writer = tensorboard.SummaryWriter("tensorboard_logs")
-
-    writer.add_graph(medfe, next(iter(train_loader)))
-    writer.close()
-
-
-if __name__ == '__main__':
-    main()

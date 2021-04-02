@@ -125,13 +125,15 @@ class TotalLoss(nn.Module):
 
     def forward(self, i_gt, i_st, i_ost, i_ote, i_out, i_gt_large, i_out_large):
         """
-        Compute the total loss. All input images are 3x32x32 tensors.
+        Compute the total loss. All input images are 3x32x32 tensors unless specified otherwise.
 
-        :param i_gt: Ground truth image (unmasked, downsampled)
+        :param i_gt: Ground truth image (unmasked)
         :param i_st: 'Structure Image' of i_gt
         :param i_ost: Output of structure branch, mapped to RGB using a 1x1 convolution
         :param i_ote: Output of texture branch, mapped to RGB using a 1x1 convolution
         :param i_out: Final predicted image
+        :param i_gt_large: Ground truth image (unmasked, 3x256x256)
+        :param i_out_large: Output image (3x256x256)
         :return: Scalar loss
         """
         return (LAMBDA["reconstruction_structure"] * self.loss_rst(i_ost, i_st) +

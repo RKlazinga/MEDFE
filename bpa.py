@@ -69,7 +69,7 @@ class Bpa(nn.Module):
         ranged = self.range_step(x)
         spatialed = self.spatial_step(x)
 
-        print(ranged.shape, spatialed.shape)
+        # print(ranged.shape, spatialed.shape)
         combined = torch.cat((ranged, spatialed), dim=1)
 
         return self.combine_conv(combined)
