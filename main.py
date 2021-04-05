@@ -8,6 +8,11 @@ from torch.utils import tensorboard, data
 from loss import TotalLoss
 from network import MEDFE
 from dataset import CustomDataset
+from torchvision import transforms
+import PIL
+import PIL.Image
+import PIL.ImageTk
+import tkinter as tk
 
 
 def main(args):
@@ -27,6 +32,10 @@ def main(args):
     model = MEDFE().to(device)
     optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = TotalLoss(model)
+
+    if args.output_intermediates:
+        to_pil = transforms.ToPILImage()
+        win = tk.Tk()
 
     for epoch in range(10):
         loss = 0
@@ -54,6 +63,27 @@ def main(args):
             loss += single_loss.item()
             for k, v in criterion.last_loss.items():
                 loss_components[k] = loss_components.get(k, 0) + v
+
+            if args.output_intermediates:
+                im_masked_image = batch['masked_image'].split([3, 1], dim=1)[0].reshape(3, 256, 256)
+                im_gt = gt256.split([3, 1], dim=1)[0].reshape(3, 256, 256)
+                im_gt_smooth = batch['gt_smooth'].split([3, 1], dim=1)[0].reshape(3, 32, 32)
+                im_st = model.struct_branch_img.reshape(3, 32, 32)
+                im_te = model.tex_branch_img.reshape(3, 32, 32)
+                im_out = out.reshape(3, 256, 256)
+
+                im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
+                im.paste(to_pil(im_masked_image), (0, 0))
+                im.paste(to_pil(im_gt), (256, 0))
+                im.paste(CustomDataset.scale(to_pil(im_gt_smooth), resample_method=PIL.Image.NEAREST), (512, 0))
+                im.paste(CustomDataset.scale(to_pil(im_st), resample_method=PIL.Image.NEAREST), (0, 256))
+                im.paste(CustomDataset.scale(to_pil(im_te), resample_method=PIL.Image.NEAREST), (256, 256))
+                im.paste(to_pil(im_out), (512, 256))
+                tkimg = PIL.ImageTk.PhotoImage(im)
+                iml = tk.Label(win, image=tkimg)
+                iml.pack()
+                win.update()
+                iml.pack_forget()
         loss /= len(train_loader)
         print(epoch, loss)
         for k, v in loss_components.items():
@@ -67,5 +97,10 @@ if __name__ == '__main__':
     parser.add_argument('--batch-size', default=1, type=int, help='the number of images to train with in a single batch')
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')
+    parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')
 
-    main(parser.parse_args())
+    iargs = parser.parse_args()
+    if iargs.output_intermediates and iargs.batch_size != 1:
+        raise ValueError("Intermediates can only be shown if the batch size is 1")
+
+    main(iargs)
