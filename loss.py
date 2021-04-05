@@ -53,18 +53,19 @@ class StylePerceptualLoss(nn.Module):
         """
 
         # get the batch_size, depth, height, and width of the Tensor
-        _, d, h, w = tensor.size()
+        n, d, h, w = tensor.size()
 
         # reshape so we're multiplying the features for each channel
-        tensor = tensor.view(d, h * w)
+        tensor = tensor.view(n, d, h * w)
 
         # calculate the gram matrix
-        gram = torch.mm(tensor, tensor.t())
+        gram = torch.matmul(tensor, tensor.transpose(1, 2))
 
         return gram
 
     def _add_mask(self, tensor):
-        return torch.cat((tensor, self.all_1_mask_256), dim=1)
+        n = tensor.shape[0]
+        return torch.cat((tensor, self.all_1_mask_256.expand(n, -1, -1, -1)), dim=1)
 
     def forward(self, i_gt, i_out):
         """
@@ -77,7 +78,8 @@ class StylePerceptualLoss(nn.Module):
         # TODO possibly uncomment this if everything dies on Perceptual Loss
         # state = self.model.state_dict(keep_vars=True)
         with torch.no_grad():
-            actual_mask = self.model.set_mask(self.all_1_mask_256)
+            n = i_gt.shape[0]
+            actual_mask = self.model.set_mask(self.all_1_mask_256.expand(n, -1, -1, -1))
 
             self.model(self._add_mask(i_gt))
             activation_gt = (
