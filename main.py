@@ -20,12 +20,12 @@ def main(args):
     device = torch.device(device_name)
 
     img_folder = "data/celeba/img_align_celeba"
-    train_size = 10  # celeba dataset is 202k images large
+    train_size = args.train_size  # celeba dataset is 202k images large
     training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
-    train_loader = data.DataLoader(training_set, batch_size=1, shuffle=True, num_workers=1)
+    train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=1)
 
     model = MEDFE().to(device)
-    optimiser = optim.Adam(model.parameters())
+    optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = TotalLoss(model)
 
     for epoch in range(10):
@@ -58,8 +58,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Train the image inpainting network')
 
-    parser.add_argument('--cuda', action='store_true', help='Run with CUDA')
+    parser.add_argument('--train-size', default=10, type=int, help='the number of images to train with')
+    parser.add_argument('--batch-size', default=1, type=int, help='the number of images to train with in a single batch')
+    parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
+    parser.add_argument('--cuda', action='store_true', help='run with CUDA')
 
-    args = parser.parse_args()
-
-    main(args)
+    main(parser.parse_args())
