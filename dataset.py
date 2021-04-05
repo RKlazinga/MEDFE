@@ -42,17 +42,17 @@ class CustomDataset(data.Dataset):
         return sample
 
     def _add_mask_to_image(self, img, mask):
-        return torch.cat((self.to_tensor(img) / 255.0, mask), dim=0).float()
+        return torch.cat((self.to_tensor(img), mask), dim=0).float()
 
     @staticmethod
-    def scale(im: Image.Image, size=256):
+    def scale(im: Image.Image, size=256, resample_method=Image.BILINEAR):
         # reshape im to be square
         if im.height > im.width:
             im = im.crop((0, int((im.height - im.width)/2), im.width, im.height - int((im.height - im.width)/2)))
         elif im.width > im.height:
             im = im.crop((int((im.width - im.height)/2), 0, im.width - int((im.width - im.height)/2), im.height))
 
-        return im.resize((size, size), resample=Image.BILINEAR)
+        return im.resize((size, size), resample=resample_method)
 
     @staticmethod
     def preproc_img(img_path, mask_path=None):
@@ -66,16 +66,16 @@ class CustomDataset(data.Dataset):
         if mask_path is not None:
             # open mask and make values binary
             mask = np.array(Image.open(mask_path).convert("L")) / 255.0
-            mask[mask <= 0.5] = 0
-            mask[mask > 0.5] = 1
+            mask[mask <= 0.5] = 0.0
+            mask[mask > 0.5] = 1.0
         else:
-            mask = np.full((256, 256), 1)
-            mask[64:-64, 64:-64] = 0
+            mask = np.full((256, 256), 1.0)
+            mask[64:-64, 64:-64] = 0.0
 
         # open image and apply mask by making masked pixels black
         im = Image.open(img_path).convert("RGB")
-        im = np.array(CustomDataset.scale(im)) / 255.0
-        im[mask == 0, :] = 0
+        im = np.array(CustomDataset.scale(im)) / 255
+        im[mask == 0.0, :] = 0.0
 
         sample = torch.cat((
             torch.tensor(im),
