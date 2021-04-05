@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torchvision import transforms
-import numpy as np
+import torchvision.models.vgg as vgg
 
 from network import MEDFE
 
@@ -27,7 +27,15 @@ class StylePerceptualLoss(nn.Module):
 
     def __init__(self, model: MEDFE):
         super().__init__()
-        self.model = model
+        self.vgg_layers = vgg.vgg16(pretrained=True).features
+        self.layer_name_mapping = {
+            '1': "relu1_1",
+            '6': "relu2_1",
+            '11': "relu3_1",
+            '18': "relu4_1",
+            '25': "relu5_1",
+        }
+
         self.percept_loss1 = nn.L1Loss()
         self.percept_loss2 = nn.L1Loss()
         self.percept_loss3 = nn.L1Loss()
@@ -39,8 +47,6 @@ class StylePerceptualLoss(nn.Module):
         self.style_loss3 = nn.L1Loss()
         self.style_loss4 = nn.L1Loss()
         self.style_loss5 = nn.L1Loss()
-
-        self.all_1_mask_256 = torch.tensor(np.full((256, 256), 256).reshape(1, 1, 256, 256)).float()
 
         self.last_loss = None
 
@@ -77,50 +83,33 @@ class StylePerceptualLoss(nn.Module):
         :param i_out: 3x256x256 tensor, the output of the network on the masked image
         :return: A float
         """
-        # TODO possibly uncomment this if everything dies on Perceptual Loss
-        # state = self.model.state_dict(keep_vars=True)
-        with torch.no_grad():
-            n = i_gt.shape[0]
-            actual_mask = self.model.set_mask(self.all_1_mask_256.expand(n, -1, -1, -1))
 
-            self.model(self._add_mask(i_gt))
-            activation_gt = (
-                self.model.relu1_cache.clone(),
-                self.model.relu2_cache.clone(),
-                self.model.relu3_cache.clone(),
-                self.model.relu4_cache.clone(),
-                self.model.relu5_cache.clone()
-            )
+        activation_gt = {}
+        activation_out = {}
 
-            self.model(self._add_mask(i_out))
-            activation_out = (
-                self.model.relu1_cache.clone(),
-                self.model.relu2_cache.clone(),
-                self.model.relu3_cache.clone(),
-                self.model.relu4_cache.clone(),
-                self.model.relu5_cache.clone()
-            )
-
-            self.model.set_mask(actual_mask)
-        # self.model.load_state_dict(state)
+        for name, module in self.vgg_layers._modules.items():
+            i_gt = module(i_gt)
+            i_out = module(i_out)
+            if name in self.layer_name_mapping:
+                activation_gt[self.layer_name_mapping[name]] = i_gt
+                activation_out[self.layer_name_mapping[name]] = i_out
 
         percept_loss = 0
-        percept_loss += self.percept_loss1(activation_gt[0], activation_out[0]) / 64
-        percept_loss += self.percept_loss2(activation_gt[1], activation_out[1]) / 128
-        percept_loss += self.percept_loss3(activation_gt[2], activation_out[2]) / 256
-        percept_loss += self.percept_loss4(activation_gt[3], activation_out[3]) / 512
-        percept_loss += self.percept_loss5(activation_gt[4], activation_out[4]) / 512
+        percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1']) / 64
+        percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1']) / 128
+        percept_loss += self.percept_loss3(activation_gt['relu3_1'], activation_out['relu3_1']) / 256
+        percept_loss += self.percept_loss4(activation_gt['relu4_1'], activation_out['relu4_1']) / 512
+        percept_loss += self.percept_loss5(activation_gt['relu5_1'], activation_out['relu5_1']) / 512
 
-        gram_gt = [self.gram_matrix(x) for x in activation_gt]
-        gram_out = [self.gram_matrix(x) for x in activation_out]
+        gram_gt = {l: self.gram_matrix(x) for l, x in activation_gt.items()}
+        gram_out = {l: self.gram_matrix(x) for l, x in activation_out.items()}
 
         style_loss = 0
-        style_loss += self.style_loss1(gram_gt[0], gram_out[0])
-        style_loss += self.style_loss2(gram_gt[1], gram_out[1])
-        style_loss += self.style_loss3(gram_gt[2], gram_out[2])
-        style_loss += self.style_loss4(gram_gt[3], gram_out[3])
-        style_loss += self.style_loss5(gram_gt[4], gram_out[4])
-        style_loss = torch.Tensor([2000])
+        style_loss += self.style_loss1(gram_gt['relu1_1'], gram_out['relu1_1'])
+        style_loss += self.style_loss2(gram_gt['relu2_1'], gram_out['relu2_1'])
+        style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
+        style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
+        style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
 
         self.last_loss = {
             'perceptual': percept_loss,
