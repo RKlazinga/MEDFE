@@ -42,6 +42,8 @@ class StylePerceptualLoss(nn.Module):
 
         self.all_1_mask_256 = torch.tensor(np.full((256, 256), 256).reshape(1, 1, 256, 256)).float()
 
+        self.last_loss = None
+
     @staticmethod
     def gram_matrix(tensor):
         """
@@ -108,7 +110,6 @@ class StylePerceptualLoss(nn.Module):
         percept_loss += self.percept_loss3(activation_gt[2], activation_out[2]) / 256
         percept_loss += self.percept_loss4(activation_gt[3], activation_out[3]) / 512
         percept_loss += self.percept_loss5(activation_gt[4], activation_out[4]) / 512
-        percept_loss *= LAMBDA["perceptual"]
 
         gram_gt = [self.gram_matrix(x) for x in activation_gt]
         gram_out = [self.gram_matrix(x) for x in activation_out]
@@ -119,9 +120,14 @@ class StylePerceptualLoss(nn.Module):
         style_loss += self.style_loss3(gram_gt[2], gram_out[2])
         style_loss += self.style_loss4(gram_gt[3], gram_out[3])
         style_loss += self.style_loss5(gram_gt[4], gram_out[4])
-        style_loss *= LAMBDA["style"]
+        style_loss = torch.Tensor([2000])
 
-        return percept_loss + style_loss
+        self.last_loss = {
+            'perceptual': percept_loss,
+            'style': style_loss,
+        }
+
+        return sum(LAMBDA[k] * self.last_loss[k] for k in self.last_loss.keys())
 
 
 class TotalLoss(nn.Module):
@@ -131,6 +137,8 @@ class TotalLoss(nn.Module):
         self.lost_rte = nn.L1Loss(reduction="sum")
         self.loss_re = nn.L1Loss(reduction="sum")
         self.style_percept_loss = StylePerceptualLoss(model)
+
+        self.last_loss = None
 
     def forward(self, i_gt, i_st, i_ost, i_ote, i_out, i_gt_large, i_out_large):
         """
@@ -145,10 +153,17 @@ class TotalLoss(nn.Module):
         :param i_out_large: Output image (3x256x256)
         :return: Scalar loss
         """
-        return (LAMBDA["reconstruction_structure"] * self.loss_rst(i_ost, self._remove_mask(i_st)) +
-                LAMBDA["reconstruction_texture"] * self.lost_rte(i_ote, self._remove_mask(i_gt)) +
-                LAMBDA["reconstruction_out"] * self.loss_re(i_out, self._remove_mask(i_gt)) +
-                self.style_percept_loss(self._remove_mask(i_gt_large), i_out_large))
+
+        self.style_percept_loss(self._remove_mask(i_gt_large), i_out_large)
+
+        self.last_loss = {
+            'reconstruction_structure': self.loss_rst(i_ost, self._remove_mask(i_st)),
+            'reconstruction_texture': self.lost_rte(i_ote, self._remove_mask(i_gt)),
+            'reconstruction_out': self.loss_re(i_out, self._remove_mask(i_gt)),
+            **self.style_percept_loss.last_loss,
+        }
+
+        return sum(LAMBDA[k] * self.last_loss[k] for k in self.last_loss.keys())
 
     @staticmethod
     def _remove_mask(tensor):

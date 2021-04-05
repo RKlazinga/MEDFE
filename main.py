@@ -30,6 +30,7 @@ def main(args):
 
     for epoch in range(10):
         loss = 0
+        loss_components = {}
         for batch_idx, batch in enumerate(train_loader):
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
@@ -51,8 +52,12 @@ def main(args):
             single_loss.backward()
             optimiser.step()
             loss += single_loss.item()
+            for k, v in criterion.last_loss.items():
+                loss_components[k] = loss_components.get(k, 0) + v
         loss /= len(train_loader)
         print(epoch, loss)
+        for k, v in loss_components.items():
+            print('\t', k, ' = ', (v / len(train_loader)).item(), sep='')
 
 
 if __name__ == '__main__':
