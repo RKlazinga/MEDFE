@@ -110,6 +110,7 @@ class StylePerceptualLoss(nn.Module):
         style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
         style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
         style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
+        style_loss = torch.tensor([0.0])
 
         self.last_loss = {
             'perceptual': percept_loss,
