@@ -67,11 +67,22 @@ class MEDFE(nn.Module):
         self.branch_scale_1 = nn.ConvTranspose2d(512, 64, kernel_size=(4, 4), stride=(4, 4))
 
         self.deconv6 = nn.ConvTranspose2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_6 = nn.ReLU()
+
         self.deconv5 = nn.ConvTranspose2d(1024, 512, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_5 = nn.ReLU()
+
         self.deconv4 = nn.ConvTranspose2d(1024, 256, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_4 = nn.ReLU()
+
         self.deconv3 = nn.ConvTranspose2d(512, 128, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_3 = nn.ReLU()
+
         self.deconv2 = nn.ConvTranspose2d(256, 64, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_2 = nn.ReLU()
+
         self.deconv1 = nn.ConvTranspose2d(128, 3, (4, 4), stride=(2, 2), padding=(1, 1))
+        self.relu_de_1 = nn.ReLU()
 
         self.mask = None
 
@@ -136,12 +147,12 @@ class MEDFE(nn.Module):
 
         # TODO relu deconvolutions!
         y6 = self.deconv6(x_res)
-        y5 = self.deconv5(torch.cat((y6, x5_skip), dim=1))
-        y4 = self.deconv4(torch.cat((y5, x4_skip), dim=1))
-        y3 = self.deconv3(torch.cat((y4, x3_skip), dim=1))
-        y2 = self.deconv2(torch.cat((y3, x2_skip), dim=1))
-        y1 = self.deconv1(torch.cat((y2, x1_skip), dim=1))
+        y5 = self.deconv5(torch.cat((self.relu_de_6(y6), x5_skip), dim=1))
+        y4 = self.deconv4(torch.cat((self.relu_de_5(y5), x4_skip), dim=1))
+        y3 = self.deconv3(torch.cat((self.relu_de_4(y4), x3_skip), dim=1))
+        y2 = self.deconv2(torch.cat((self.relu_de_3(y3), x2_skip), dim=1))
+        y1 = self.deconv1(torch.cat((self.relu_de_2(y2), x1_skip), dim=1))
 
-        return y1
+        return self.relu_de_1(y1)
 
 
