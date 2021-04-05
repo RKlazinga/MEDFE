@@ -1,24 +1,30 @@
-import os
+import argparse
 
-from PIL import Image
+import torch
 from torch import nn, optim
 from torch.nn.functional import interpolate
 from torch.utils import tensorboard, data
-from torchvision.transforms.functional import to_tensor, to_pil_image
-from tqdm import tqdm
 
 from loss import TotalLoss
 from network import MEDFE
 from dataset import CustomDataset
 
 
-def main():
+def main(args):
+    device_name = 'cpu'
+    if args.cuda:
+        if not torch.cuda.is_available():
+            raise RuntimeError('CUDA is requested, but not available')
+        device_name = 'cuda'
+
+    device = torch.device(device_name)
+
     img_folder = "data/celeba/img_align_celeba"
     train_size = 10  # celeba dataset is 202k images large
     training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
     train_loader = data.DataLoader(training_set, batch_size=1, shuffle=True, num_workers=1)
 
-    model = MEDFE()
+    model = MEDFE().to(device)
     optimiser = optim.Adam(model.parameters())
     criterion = TotalLoss(model)
 
@@ -50,4 +56,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser('Train the image inpainting network')
+
+    parser.add_argument('--cuda', action='store_true', help='Run with CUDA')
+
+    args = parser.parse_args()
+
+    main(args)

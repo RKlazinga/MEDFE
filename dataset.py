@@ -15,24 +15,34 @@ class CustomDataset(data.Dataset):
         self.images = os.listdir(self.img_dir)[:size]
         self.to_tensor = transforms.ToTensor()
 
+        self.all_1_mask_32 = torch.tensor(np.full((32, 32), 32).reshape(1, 32, 32))
+        self.all_1_mask_256 = torch.tensor(np.full((256, 256), 256).reshape(1, 256, 256))
+
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, item):
         name = self.images[item]
         img_path = f"{self.img_dir}/{name}"
+        smooth_img_path = f"{self.smooth_dir}/{name}"
 
-        unmasked_img = self.scale(Image.open(f"{self.img_dir}/{name}").convert("RGB"))
-        unmasked_smooth_img = self.scale(Image.open(f"{self.smooth_dir}/{name}").convert("RGB"), 32)
+        unmasked_img = self._add_mask_to_image(self.scale(Image.open(img_path).convert("RGB")), self.all_1_mask_256)
+        unmasked_smooth_img = self._add_mask_to_image(
+            self.scale(Image.open(smooth_img_path).convert("RGB"), 32),
+            self.all_1_mask_32
+        )
         mask, masked_img_tensor = self.preproc_img(img_path, None)
 
         sample = {
             "masked_image": masked_img_tensor,
             "mask": mask,
-            "gt": self.to_tensor(unmasked_img),
-            "gt_smooth": self.to_tensor(unmasked_smooth_img)
+            "gt": unmasked_img,
+            "gt_smooth": unmasked_smooth_img,
         }
         return sample
+
+    def _add_mask_to_image(self, img, mask):
+        return torch.cat((self.to_tensor(img), mask), dim=0).float()
 
     @staticmethod
     def scale(im: Image.Image, size=256):

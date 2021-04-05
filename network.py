@@ -1,6 +1,4 @@
-import os
-
-from torch import nn, optim
+from torch import nn
 import torch
 
 
@@ -75,9 +73,16 @@ class MEDFE(nn.Module):
         self.deconv2 = nn.ConvTranspose2d(256, 64, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv1 = nn.ConvTranspose2d(128, 3, (4, 4), stride=(2, 2), padding=(1, 1))
 
+        self.mask = None
+
     def set_mask(self, mask):
+        old_mask = self.mask
+        self.mask = mask
+
         self.texture_branch.set_mask(mask)
         self.structure_branch.set_mask(mask)
+
+        return old_mask
 
     def forward(self, x):
         x1 = self.relu1(self.conv1(x))
