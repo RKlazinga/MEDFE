@@ -15,8 +15,8 @@ class CustomDataset(data.Dataset):
         self.images = os.listdir(self.img_dir)[:size]
         self.to_tensor = transforms.ToTensor()
 
-        self.all_1_mask_32 = torch.tensor(np.full((32, 32), 32).reshape(1, 32, 32))
-        self.all_1_mask_256 = torch.tensor(np.full((256, 256), 256).reshape(1, 256, 256))
+        self.all_1_mask_32 = torch.tensor(np.full((32, 32), 1.0).reshape(1, 32, 32))
+        self.all_1_mask_256 = torch.tensor(np.full((256, 256), 1.0).reshape(1, 256, 256))
 
     def __len__(self):
         return len(self.images)
@@ -42,7 +42,7 @@ class CustomDataset(data.Dataset):
         return sample
 
     def _add_mask_to_image(self, img, mask):
-        return torch.cat((self.to_tensor(img), mask), dim=0).float()
+        return torch.cat((self.to_tensor(img) / 255.0, mask), dim=0).float()
 
     @staticmethod
     def scale(im: Image.Image, size=256):
@@ -65,16 +65,16 @@ class CustomDataset(data.Dataset):
         """
         if mask_path is not None:
             # open mask and make values binary
-            mask = np.array(Image.open(mask_path).convert("L"))
-            mask[mask <= 128] = 0
-            mask[mask > 128] = 255
+            mask = np.array(Image.open(mask_path).convert("L")) / 255.0
+            mask[mask <= 0.5] = 0
+            mask[mask > 0.5] = 1
         else:
-            mask = np.full((256, 256), 255)
+            mask = np.full((256, 256), 1)
             mask[64:-64, 64:-64] = 0
 
         # open image and apply mask by making masked pixels black
         im = Image.open(img_path).convert("RGB")
-        im = np.array(CustomDataset.scale(im))
+        im = np.array(CustomDataset.scale(im)) / 255.0
         im[mask == 0, :] = 0
 
         sample = torch.cat((
