@@ -31,13 +31,13 @@ def main(args):
 
     model = MEDFE().to(device)
     optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
-    criterion = TotalLoss(model)
+    criterion = TotalLoss()
 
     if args.output_intermediates:
         to_pil = transforms.ToPILImage()
         win = tk.Tk()
 
-    for epoch in range(10):
+    for epoch in range(1000):
         loss = 0
         loss_components = {}
         for batch_idx, batch in enumerate(train_loader):
@@ -48,7 +48,6 @@ def main(args):
 
             gt256 = batch["gt"]
             gt32 = interpolate(gt256, 32)
-
             single_loss = criterion(
                 gt32,
                 batch["gt_smooth"],
@@ -66,8 +65,8 @@ def main(args):
 
             if args.output_intermediates:
                 im_masked_image = batch['masked_image'].split([3, 1], dim=1)[0].reshape(3, 256, 256)
-                im_gt = gt256.split([3, 1], dim=1)[0].reshape(3, 256, 256)
-                im_gt_smooth = batch['gt_smooth'].split([3, 1], dim=1)[0].reshape(3, 32, 32)
+                im_gt = gt256.reshape(3, 256, 256)
+                im_gt_smooth = batch['gt_smooth'].reshape(3, 32, 32)
                 im_st = model.struct_branch_img.reshape(3, 32, 32)
                 im_te = model.tex_branch_img.reshape(3, 32, 32)
                 im_out = out.reshape(3, 256, 256)
@@ -75,9 +74,9 @@ def main(args):
                 im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
                 im.paste(to_pil(im_masked_image), (0, 0))
                 im.paste(to_pil(im_gt), (256, 0))
-                im.paste(CustomDataset.scale(to_pil(im_gt_smooth), resample_method=PIL.Image.NEAREST), (512, 0))
-                im.paste(CustomDataset.scale(to_pil(im_st), resample_method=PIL.Image.NEAREST), (0, 256))
-                im.paste(CustomDataset.scale(to_pil(im_te), resample_method=PIL.Image.NEAREST), (256, 256))
+                im.paste(CustomDataset.scale(to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
+                im.paste(CustomDataset.scale(to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
+                im.paste(CustomDataset.scale(to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
                 im.paste(to_pil(im_out), (512, 256))
                 tkimg = PIL.ImageTk.PhotoImage(im)
                 iml = tk.Label(win, image=tkimg)
@@ -85,7 +84,7 @@ def main(args):
                 win.update()
                 iml.pack_forget()
         loss /= len(train_loader)
-        print(epoch, loss)
+
         for k, v in loss_components.items():
             print('\t', k, ' = ', (v / len(train_loader)).item(), sep='')
 
@@ -93,7 +92,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Train the image inpainting network')
 
-    parser.add_argument('--train-size', default=10, type=int, help='the number of images to train with')
+    parser.add_argument('--train-size', default=1, type=int, help='the number of images to train with')
     parser.add_argument('--batch-size', default=1, type=int, help='the number of images to train with in a single batch')
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')

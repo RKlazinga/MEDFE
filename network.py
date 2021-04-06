@@ -13,23 +13,18 @@ class MEDFE(nn.Module):
 
         self.conv1 = nn.Conv2d(4, 64, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu1 = nn.ReLU()
-        self.relu1_cache = None
 
         self.conv2 = nn.Conv2d(64, 128, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu2 = nn.ReLU()
-        self.relu2_cache = None
 
         self.conv3 = nn.Conv2d(128, 256, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu3 = nn.ReLU()
-        self.relu3_cache = None
 
         self.conv4 = nn.Conv2d(256, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu4 = nn.ReLU()
-        self.relu4_cache = None
 
         self.conv5 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu5 = nn.ReLU()
-        self.relu5_cache = None
 
         self.conv6 = nn.Conv2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu6 = nn.ReLU()
@@ -82,7 +77,7 @@ class MEDFE(nn.Module):
         self.relu_de_2 = nn.ReLU()
 
         self.deconv1 = nn.ConvTranspose2d(128, 3, (4, 4), stride=(2, 2), padding=(1, 1))
-        self.relu_de_1 = nn.ReLU()
+        self.final_activation = nn.ReLU()
 
         self.mask = None
 
@@ -97,15 +92,10 @@ class MEDFE(nn.Module):
 
     def forward(self, x):
         x1 = self.relu1(self.conv1(x))
-        self.relu1_cache = x1.clone()
         x2 = self.relu2(self.conv2(x1))
-        self.relu2_cache = x2.clone()
         x3 = self.relu3(self.conv3(x2))
-        self.relu3_cache = x3.clone()
         x4 = self.relu4(self.conv4(x3))
-        self.relu4_cache = x4.clone()
         x5 = self.relu5(self.conv5(x4))
-        self.relu5_cache = x5.clone()
         x6 = self.relu6(self.conv6(x5))
 
         x_res1 = self.res_block1(x6)
@@ -145,7 +135,6 @@ class MEDFE(nn.Module):
         x2_skip = x2 + self.branch_scale_2(f_sf)
         x1_skip = x1 + self.branch_scale_1(f_sf)
 
-        # TODO relu deconvolutions!
         y6 = self.deconv6(x_res)
         y5 = self.deconv5(torch.cat((self.relu_de_6(y6), x5_skip), dim=1))
         y4 = self.deconv4(torch.cat((self.relu_de_5(y5), x4_skip), dim=1))
@@ -153,6 +142,4 @@ class MEDFE(nn.Module):
         y2 = self.deconv2(torch.cat((self.relu_de_3(y3), x2_skip), dim=1))
         y1 = self.deconv1(torch.cat((self.relu_de_2(y2), x1_skip), dim=1))
 
-        return self.relu_de_1(y1)
-
-
+        return self.final_activation(y1)

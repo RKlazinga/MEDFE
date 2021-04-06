@@ -1,6 +1,7 @@
 import os
 
 import torch
+from torch.nn import L1Loss
 from torch.utils import data
 from PIL import Image
 import numpy as np
@@ -15,22 +16,27 @@ class CustomDataset(data.Dataset):
         self.images = os.listdir(self.img_dir)[:size]
         self.to_tensor = transforms.ToTensor()
 
-        self.all_1_mask_32 = torch.tensor(np.full((32, 32), 1.0).reshape(1, 32, 32))
-        self.all_1_mask_256 = torch.tensor(np.full((256, 256), 1.0).reshape(1, 256, 256))
-
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, item):
+        """
+        Fetch and prepare a single image
+
+        :param item: Filename of the image
+        :return: A dictionary with the required tensors:
+         - 'masked_image': 4x256x256 tensor containing image with mask
+         - 'mask':  256x256x1 tensor containing the location of the mask
+         - 'gt': 3x256x256 tensor containing the unmasked image
+         - 'gt_smooth': 3x32x32 tensor containing a smoothed representation of the image
+        """
         name = self.images[item]
         img_path = f"{self.img_dir}/{name}"
         smooth_img_path = f"{self.smooth_dir}/{name}"
 
-        unmasked_img = self._add_mask_to_image(self.scale(Image.open(img_path).convert("RGB")), self.all_1_mask_256)
-        unmasked_smooth_img = self._add_mask_to_image(
-            self.scale(Image.open(smooth_img_path).convert("RGB"), 32),
-            self.all_1_mask_32
-        )
+        unmasked_img = self.to_tensor(self.scale(Image.open(img_path).convert("RGB"), 256))
+        unmasked_smooth_img = self.to_tensor(self.scale(Image.open(smooth_img_path).convert("RGB"), 32))
+
         mask, masked_img_tensor = self.preproc_img(img_path, None)
 
         sample = {
@@ -41,11 +47,8 @@ class CustomDataset(data.Dataset):
         }
         return sample
 
-    def _add_mask_to_image(self, img, mask):
-        return torch.cat((self.to_tensor(img), mask), dim=0).float()
-
     @staticmethod
-    def scale(im: Image.Image, size=256, resample_method=Image.BILINEAR):
+    def scale(im: Image.Image, size, resample_method=Image.BILINEAR):
         # reshape im to be square
         if im.height > im.width:
             im = im.crop((0, int((im.height - im.width)/2), im.width, im.height - int((im.height - im.width)/2)))
@@ -65,7 +68,7 @@ class CustomDataset(data.Dataset):
         """
         if mask_path is not None:
             # open mask and make values binary
-            mask = np.array(Image.open(mask_path).convert("L")) / 255.0
+            mask = np.array(Image.open(mask_path).convert("L")) / 255
             mask[mask <= 0.5] = 0.0
             mask[mask > 0.5] = 1.0
         else:
@@ -74,7 +77,7 @@ class CustomDataset(data.Dataset):
 
         # open image and apply mask by making masked pixels black
         im = Image.open(img_path).convert("RGB")
-        im = np.array(CustomDataset.scale(im)) / 255
+        im = np.array(CustomDataset.scale(im, 256)) / 255
         im[mask == 0.0, :] = 0.0
 
         sample = torch.cat((
