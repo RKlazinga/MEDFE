@@ -3,8 +3,6 @@ from torch import nn
 from torchvision import transforms
 import torchvision.models.vgg as vgg
 
-from network import MEDFE
-
 LAMBDA = {
     "reconstruction_out": 1,
     "reconstruction_structure": 1,
@@ -13,6 +11,15 @@ LAMBDA = {
     "style": 250,
     "adversarial": 0.2
 }
+
+ENABLED = {
+    "reconstruction_out": True,
+    "reconstruction_structure": False,
+    "reconstruction_texture": False,
+    "style_percept": False,
+    "adversarial": False
+}
+
 to_tensor = transforms.ToTensor()
 
 
@@ -25,7 +32,7 @@ class StylePerceptualLoss(nn.Module):
     https://github.com/ceshine/fast-neural-style --> loss_network.py
     """
 
-    def __init__(self, model: MEDFE):
+    def __init__(self):
         super().__init__()
         self.vgg_layers = vgg.vgg16(pretrained=True).features
         self.layer_name_mapping = {
@@ -48,8 +55,6 @@ class StylePerceptualLoss(nn.Module):
         self.style_loss4 = nn.L1Loss()
         self.style_loss5 = nn.L1Loss()
 
-        self.last_loss = None
-
     @staticmethod
     def gram_matrix(tensor):
         """
@@ -70,10 +75,6 @@ class StylePerceptualLoss(nn.Module):
         gram = torch.matmul(tensor, tensor.transpose(1, 2))
 
         return gram
-
-    def _add_mask(self, tensor):
-        n = tensor.shape[0]
-        return torch.cat((tensor, self.all_1_mask_256.expand(n, -1, -1, -1)), dim=1)
 
     def forward(self, i_gt, i_out):
         """
@@ -110,25 +111,20 @@ class StylePerceptualLoss(nn.Module):
         style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
         style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
         style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
-        style_loss = torch.tensor([0.0])
 
-        self.last_loss = {
-            'perceptual': percept_loss,
-            'style': style_loss,
-        }
-
-        return sum(LAMBDA[k] * self.last_loss[k] for k in self.last_loss.keys())
+        return percept_loss, style_loss
 
 
 class TotalLoss(nn.Module):
-    def __init__(self, model):
+    def __init__(self):
         super().__init__()
+
         self.loss_rst = nn.L1Loss(reduction="sum")
         self.lost_rte = nn.L1Loss(reduction="sum")
         self.loss_re = nn.L1Loss(reduction="sum")
-        self.style_percept_loss = StylePerceptualLoss(model)
+        self.style_percept_loss = StylePerceptualLoss()
 
-        self.last_loss = None
+        self.last_loss = {}
 
     def forward(self, i_gt, i_st, i_ost, i_ote, i_out, i_gt_large, i_out_large):
         """
@@ -143,19 +139,22 @@ class TotalLoss(nn.Module):
         :param i_out_large: Output image (3x256x256)
         :return: Scalar loss
         """
+        self.last_loss = {}
 
-        self.style_percept_loss(self._remove_mask(i_gt_large), i_out_large)
+        for loss_name, is_enabled in ENABLED.items():
+            if is_enabled:
+                if loss_name == "reconstruction_out":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out, i_gt)
+                if loss_name == "reconstruction_texture":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt)
+                if loss_name == "reconstruction_structure":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_rst(i_ost, i_st)
+                if loss_name == "style_percept":
+                    style_loss, percept_loss = self.style_percept_loss(i_gt_large, i_out_large)
 
-        self.last_loss = {
-            'reconstruction_structure': self.loss_rst(i_ost, self._remove_mask(i_st)),
-            'reconstruction_texture': self.lost_rte(i_ote, self._remove_mask(i_gt)),
-            'reconstruction_out': self.loss_re(i_out, self._remove_mask(i_gt)),
-            **self.style_percept_loss.last_loss,
-        }
+                    self.last_loss["style"] = LAMBDA["style"] * style_loss
+                    self.last_loss["perceptual"] = LAMBDA["perceptual"] * percept_loss
+                if loss_name == "adversarial":
+                    raise NotImplementedError()
 
-        return sum(LAMBDA[k] * self.last_loss[k] for k in self.last_loss.keys())
-
-    @staticmethod
-    def _remove_mask(tensor):
-        c = tensor.shape[1]
-        return torch.split(tensor, [c - 1, 1], dim=1)[0]
+        return sum(self.last_loss.values())
