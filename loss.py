@@ -95,13 +95,13 @@ class StylePerceptualLoss(nn.Module):
                 activation_gt[self.layer_name_mapping[name]] = i_gt
                 activation_out[self.layer_name_mapping[name]] = i_out
 
-        # TODO divide by layer necessary when using reduction="mean" ???
         percept_loss = 0
-        percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1']) / 5  # 64
-        percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1']) / 5  # 128
-        percept_loss += self.percept_loss3(activation_gt['relu3_1'], activation_out['relu3_1']) / 5  # 256
-        percept_loss += self.percept_loss4(activation_gt['relu4_1'], activation_out['relu4_1']) / 5  # 512
-        percept_loss += self.percept_loss5(activation_gt['relu5_1'], activation_out['relu5_1']) / 5  # 512
+        percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1'])
+        percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1'])
+        percept_loss += self.percept_loss3(activation_gt['relu3_1'], activation_out['relu3_1'])
+        percept_loss += self.percept_loss4(activation_gt['relu4_1'], activation_out['relu4_1'])
+        percept_loss += self.percept_loss5(activation_gt['relu5_1'], activation_out['relu5_1'])
+        percept_loss /= 5
 
         gram_gt = {l: self.gram_matrix(x) for l, x in activation_gt.items()}
         gram_out = {l: self.gram_matrix(x) for l, x in activation_out.items()}
@@ -112,6 +112,7 @@ class StylePerceptualLoss(nn.Module):
         style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
         style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
         style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
+        style_loss /= 5
 
         return percept_loss, style_loss
 

@@ -6,7 +6,7 @@ from torch.nn.functional import interpolate
 from torch.utils import tensorboard, data
 
 from loss import TotalLoss
-from network import MEDFE
+from network.network import MEDFE
 from dataset import CustomDataset
 from torchvision import transforms
 import PIL
@@ -27,9 +27,10 @@ def main(args):
     img_folder = "data/celeba/img_align_celeba"
     train_size = args.train_size  # celeba dataset is 202k images large
     training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
-    train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=1)
+    train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    model = MEDFE().to(device)
+    model = MEDFE(branch_channels=64,
+                  channels=8).to(device)
     optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
     criterion = TotalLoss()
 
@@ -70,7 +71,7 @@ def main(args):
                     unmasked = first_in_batch
                     if first_in_batch.shape[1] == 4:
                         unmasked = first_in_batch.split([3, 1], dim=1)[0]
-                    return unmasked.reshape(3, x, y)
+                    return torch.clamp(unmasked.reshape(3, x, y), 0, 1)
 
                 im_masked_image = to_im_shape(batch['masked_image'])
                 im_gt = to_im_shape(gt256)
@@ -78,7 +79,7 @@ def main(args):
                 if model.struct_branch_img is not None:
                     im_st = to_im_shape(model.struct_branch_img, 32, 32)
                     im_te = to_im_shape(model.tex_branch_img, 32, 32)
-                im_out = torch.clamp(out[0], 0, 1)
+                im_out = to_im_shape(out)
 
                 im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
                 im.paste(to_pil(im_masked_image), (0, 0))
@@ -93,7 +94,7 @@ def main(args):
                 iml = tk.Label(win, image=tkimg)
                 iml.pack()
 
-                ll = tk.Label(win, text=f"| || || |_: {single_loss.item()}")
+                ll = tk.Label(win, text=', '.join([f"{loss_name}:{round(float(value),2)}" for loss_name, value in criterion.last_loss.items()]))
                 ll.pack()
                 win.update()
                 iml.pack_forget()
@@ -109,8 +110,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Train the image inpainting network')
 
-    parser.add_argument('--train-size', default=100, type=int, help='the number of images to train with')
-    parser.add_argument('--batch-size', default=25, type=int, help='the number of images to train with in a single batch')
+    parser.add_argument('--train-size', default=5000, type=int, help='the number of images to train with')
+    parser.add_argument('--batch-size', default=50, type=int, help='the number of images to train with in a single batch')
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')
     parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')

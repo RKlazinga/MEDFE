@@ -21,24 +21,68 @@ class Branch(nn.Module):
         self.input_size = input_size
 
         self.stream7_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.relu7_1 = nn.ReLU()
+        self.batch_norm7_1 = nn.BatchNorm2d(self.input_size)
+
         self.stream7_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.relu7_2 = nn.ReLU()
+        self.batch_norm7_2 = nn.BatchNorm2d(self.input_size)
+
         self.stream7_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.relu7_3 = nn.ReLU()
+        self.batch_norm7_3 = nn.BatchNorm2d(self.input_size)
+
         self.stream7_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.relu7_4 = nn.ReLU()
+        self.batch_norm7_4 = nn.BatchNorm2d(self.input_size)
+
         self.stream7_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(7, 7), padding=(3, 3))
+        self.relu7_5 = nn.ReLU()
+        self.batch_norm7_5 = nn.BatchNorm2d(self.input_size)
 
         self.stream5_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.relu5_1 = nn.ReLU()
+        self.batch_norm5_1 = nn.BatchNorm2d(self.input_size)
+
         self.stream5_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.relu5_2 = nn.ReLU()
+        self.batch_norm5_2 = nn.BatchNorm2d(self.input_size)
+
         self.stream5_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.relu5_3 = nn.ReLU()
+        self.batch_norm5_3 = nn.BatchNorm2d(self.input_size)
+
         self.stream5_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.relu5_4 = nn.ReLU()
+        self.batch_norm5_4 = nn.BatchNorm2d(self.input_size)
+
         self.stream5_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(5, 5), padding=(2, 2))
+        self.relu5_5 = nn.ReLU()
+        self.batch_norm5_5 = nn.BatchNorm2d(self.input_size)
 
         self.stream3_1 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.relu3_1 = nn.ReLU()
+        self.batch_norm3_1 = nn.BatchNorm2d(self.input_size)
+
         self.stream3_2 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.relu3_2 = nn.ReLU()
+        self.batch_norm3_2 = nn.BatchNorm2d(self.input_size)
+
         self.stream3_3 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.relu3_3 = nn.ReLU()
+        self.batch_norm3_3 = nn.BatchNorm2d(self.input_size)
+
         self.stream3_4 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.relu3_4 = nn.ReLU()
+        self.batch_norm3_4 = nn.BatchNorm2d(self.input_size)
+
         self.stream3_5 = PartialConv2d(self.input_size, self.input_size, kernel_size=(3, 3), padding=(1, 1))
+        self.relu3_5 = nn.ReLU()
+        self.batch_norm3_5 = nn.BatchNorm2d(self.input_size)
 
         self.combining_conv = nn.Conv2d(3 * self.input_size, self.input_size, kernel_size=(1, 1))
+        self.combine_relu = nn.ReLU()
+        self.combine_batch_norm = nn.BatchNorm2d(self.input_size)
 
     def set_mask(self, mask):
         n = mask.shape[0]
@@ -46,22 +90,51 @@ class Branch(nn.Module):
 
     def forward(self, f):
         stream_7 = self.stream7_1(f, mask_in=self.mask)
+        stream_7 = self.batch_norm7_1(self.relu7_1(stream_7))
+
         stream_7 = self.stream7_2(stream_7, mask_in=self.mask)
+        stream_7 = self.batch_norm7_2(self.relu7_2(stream_7))
+
         stream_7 = self.stream7_3(stream_7, mask_in=self.mask)
+        stream_7 = self.batch_norm7_3(self.relu7_3(stream_7))
+
         stream_7 = self.stream7_4(stream_7, mask_in=self.mask)
+        stream_7 = self.batch_norm7_4(self.relu7_4(stream_7))
+
         stream_7 = self.stream7_5(stream_7, mask_in=self.mask)
+        stream_7 = self.batch_norm7_5(self.relu7_5(stream_7))
 
         stream_5 = self.stream5_1(f, mask_in=self.mask)
+        stream_5 = self.batch_norm5_1(self.relu5_1(stream_5))
+
         stream_5 = self.stream5_2(stream_5, mask_in=self.mask)
+        stream_5 = self.batch_norm5_2(self.relu5_2(stream_5))
+
         stream_5 = self.stream5_3(stream_5, mask_in=self.mask)
+        stream_5 = self.batch_norm5_3(self.relu5_3(stream_5))
+
         stream_5 = self.stream5_4(stream_5, mask_in=self.mask)
+        stream_5 = self.batch_norm5_4(self.relu5_4(stream_5))
+
         stream_5 = self.stream5_5(stream_5, mask_in=self.mask)
+        stream_5 = self.batch_norm5_5(self.relu5_5(stream_5))
 
         stream_3 = self.stream3_1(f, mask_in=self.mask)
+        stream_3 = self.batch_norm3_1(self.relu3_1(stream_3))
+
         stream_3 = self.stream3_2(stream_3, mask_in=self.mask)
+        stream_3 = self.batch_norm3_2(self.relu3_2(stream_3))
+
         stream_3 = self.stream3_3(stream_3, mask_in=self.mask)
+        stream_3 = self.batch_norm3_3(self.relu3_3(stream_3))
+
         stream_3 = self.stream3_4(stream_3, mask_in=self.mask)
+        stream_3 = self.batch_norm3_4(self.relu3_4(stream_3))
+
         stream_3 = self.stream3_5(stream_3, mask_in=self.mask)
+        stream_3 = self.batch_norm3_5(self.relu3_5(stream_3))
 
         concat = torch.cat((stream_3, stream_5, stream_7), dim=1)
-        return self.combining_conv(concat)
+        combined = self.combining_conv(concat)
+
+        return self.combine_batch_norm(self.combine_relu(combined))

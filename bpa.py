@@ -63,7 +63,7 @@ class Bpa(nn.Module):
         self.range_step = RangeStep()
         self.spatial_step = SpatialStep(input_shape)
 
-        self.combine_conv = nn.Conv2d(1024, 512, (1, 1))
+        self.combine_conv = nn.Conv2d(2 * input_shape[1], input_shape[1], (1, 1))
 
     def forward(self, x):
         ranged = self.range_step(x)
