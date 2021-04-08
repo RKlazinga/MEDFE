@@ -78,7 +78,7 @@ def main(args):
                 if model.struct_branch_img:
                     im_st = to_im_shape(model.struct_branch_img, 32, 32)
                     im_te = to_im_shape(model.tex_branch_img, 32, 32)
-                im_out = out[0]
+                im_out = torch.clamp(out[0], 0, 1)
 
                 im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
                 im.paste(to_pil(im_masked_image), (0, 0))
@@ -103,6 +103,7 @@ def main(args):
 
         for k, v in loss_components.items():
             print('\t', k, ' = ', (v / len(train_loader)).item(), sep='')
+        torch.save(model.state_dict(), "MODEL")
 
 
 if __name__ == '__main__':

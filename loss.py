@@ -145,7 +145,7 @@ class TotalLoss(nn.Module):
         for loss_name, is_enabled in ENABLED.items():
             if is_enabled:
                 if loss_name == "reconstruction_out":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out, i_gt)
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out_large, i_gt_large)
                 if loss_name == "reconstruction_texture":
                     self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt)
                 if loss_name == "reconstruction_structure":
