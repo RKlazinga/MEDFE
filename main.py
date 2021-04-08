@@ -65,12 +65,19 @@ def main(args):
                 loss_components[k] = loss_components.get(k, 0) + v
 
             if args.output_intermediates:
-                im_masked_image = batch['masked_image'].split([3, 1], dim=1)[0].reshape(3, 256, 256)
-                im_gt = gt256.reshape(3, 256, 256)
-                im_gt_smooth = batch['gt_smooth'].reshape(3, 32, 32)
-                im_st = model.struct_branch_img.reshape(3, 32, 32)
-                im_te = model.tex_branch_img.reshape(3, 32, 32)
-                im_out = out.reshape(3, 256, 256)
+                def to_im_shape(t: torch.Tensor, x: int = 256, y: int = 256):
+                    first_in_batch = t.split([1, args.batch_size - 1], dim=0)[0]
+                    unmasked = first_in_batch
+                    if first_in_batch.shape[1] == 4:
+                        unmasked = first_in_batch.split([3, 1], dim=1)[0]
+                    return unmasked.reshape(3, x, y)
+
+                im_masked_image = to_im_shape(batch['masked_image'])
+                im_gt = to_im_shape(gt256)
+                im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
+                im_st = to_im_shape(model.struct_branch_img, 32, 32)
+                im_te = to_im_shape(model.tex_branch_img, 32, 32)
+                im_out = to_im_shape(out)
 
                 im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
                 im.paste(to_pil(im_masked_image), (0, 0))
@@ -79,11 +86,17 @@ def main(args):
                 im.paste(CustomDataset.scale(to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
                 im.paste(CustomDataset.scale(to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
                 im.paste(to_pil(im_out), (512, 256))
+
                 tkimg = PIL.ImageTk.PhotoImage(im)
                 iml = tk.Label(win, image=tkimg)
                 iml.pack()
+
+                ll = tk.Label(win, text=f"| || || |_: {single_loss.item()}")
+                ll.pack()
                 win.update()
                 iml.pack_forget()
+                ll.pack_forget()
+
         loss /= len(train_loader)
 
         for k, v in loss_components.items():
@@ -100,7 +113,5 @@ if __name__ == '__main__':
     parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')
 
     iargs = parser.parse_args()
-    if iargs.output_intermediates and iargs.batch_size != 1:
-        raise ValueError("Intermediates can only be shown if the batch size is 1")
 
     main(iargs)
