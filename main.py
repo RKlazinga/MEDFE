@@ -75,16 +75,18 @@ def main(args):
                 im_masked_image = to_im_shape(batch['masked_image'])
                 im_gt = to_im_shape(gt256)
                 im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
-                im_st = to_im_shape(model.struct_branch_img, 32, 32)
-                im_te = to_im_shape(model.tex_branch_img, 32, 32)
-                im_out = to_im_shape(out)
+                if model.struct_branch_img:
+                    im_st = to_im_shape(model.struct_branch_img, 32, 32)
+                    im_te = to_im_shape(model.tex_branch_img, 32, 32)
+                im_out = out[0]
 
                 im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
                 im.paste(to_pil(im_masked_image), (0, 0))
                 im.paste(to_pil(im_gt), (256, 0))
                 im.paste(CustomDataset.scale(to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
-                im.paste(CustomDataset.scale(to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
-                im.paste(CustomDataset.scale(to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
+                if model.struct_branch_img:
+                    im.paste(CustomDataset.scale(to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
+                    im.paste(CustomDataset.scale(to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
                 im.paste(to_pil(im_out), (512, 256))
 
                 tkimg = PIL.ImageTk.PhotoImage(im)
@@ -106,8 +108,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Train the image inpainting network')
 
-    parser.add_argument('--train-size', default=1, type=int, help='the number of images to train with')
-    parser.add_argument('--batch-size', default=1, type=int, help='the number of images to train with in a single batch')
+    parser.add_argument('--train-size', default=100, type=int, help='the number of images to train with')
+    parser.add_argument('--batch-size', default=25, type=int, help='the number of images to train with in a single batch')
     parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')
     parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')

@@ -95,6 +95,7 @@ class StylePerceptualLoss(nn.Module):
                 activation_gt[self.layer_name_mapping[name]] = i_gt
                 activation_out[self.layer_name_mapping[name]] = i_out
 
+        # TODO divide by layer necessary when using reduction="mean" ???
         percept_loss = 0
         percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1']) / 64
         percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1']) / 128
@@ -119,9 +120,9 @@ class TotalLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.loss_rst = nn.L1Loss(reduction="sum")
-        self.lost_rte = nn.L1Loss(reduction="sum")
-        self.loss_re = nn.L1Loss(reduction="sum")
+        self.loss_rst = nn.L1Loss()
+        self.lost_rte = nn.L1Loss()
+        self.loss_re = nn.L1Loss()
         self.style_percept_loss = StylePerceptualLoss()
 
         self.last_loss = {}
