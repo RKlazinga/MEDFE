@@ -41,6 +41,7 @@ def main(args):
         loss = 0
         loss_components = {}
         for batch_idx, batch in enumerate(train_loader):
+            optimiser.zero_grad()
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
             out = model(batch["masked_image"])
