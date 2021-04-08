@@ -75,7 +75,7 @@ def main(args):
                 im_masked_image = to_im_shape(batch['masked_image'])
                 im_gt = to_im_shape(gt256)
                 im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
-                if model.struct_branch_img:
+                if model.struct_branch_img is not None:
                     im_st = to_im_shape(model.struct_branch_img, 32, 32)
                     im_te = to_im_shape(model.tex_branch_img, 32, 32)
                 im_out = torch.clamp(out[0], 0, 1)
@@ -84,7 +84,7 @@ def main(args):
                 im.paste(to_pil(im_masked_image), (0, 0))
                 im.paste(to_pil(im_gt), (256, 0))
                 im.paste(CustomDataset.scale(to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
-                if model.struct_branch_img:
+                if model.struct_branch_img is not None:
                     im.paste(CustomDataset.scale(to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
                     im.paste(CustomDataset.scale(to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
                 im.paste(to_pil(im_out), (512, 256))

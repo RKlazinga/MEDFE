@@ -8,7 +8,7 @@ from bpa import Bpa
 
 
 class MEDFE(nn.Module):
-    def __init__(self, batch_norm=False, use_bpa=False, use_branch=False, use_res=True):
+    def __init__(self, batch_norm=True, use_bpa=False, use_branch=True, use_res=True, branch_channels=10):
         super().__init__()
 
         self.batch_norm = batch_norm
@@ -53,32 +53,32 @@ class MEDFE(nn.Module):
         self.res_block3 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
         self.res_block4 = ResBlock(512, 512, kernel_size=(2, 2), dilation=(2, 2))
 
-        self.tex_branch_downscale_1 = nn.Conv2d(64, 512, kernel_size=(4, 4), stride=(4, 4))
-        self.tex_branch_downscale_2 = nn.Conv2d(128, 512, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.tex_branch_downscale_3 = nn.Conv2d(256, 512, kernel_size=(1, 1))
-        self.tex_branch_combine = nn.Conv2d(3*512, 512, kernel_size=(1, 1))
-        self.texture_branch = Branch(512)
-        self.tex_branch_to_img = nn.Conv2d(512, 3, kernel_size=(1,1))
+        self.tex_branch_downscale_1 = nn.Conv2d(64, branch_channels, kernel_size=(4, 4), stride=(4, 4))
+        self.tex_branch_downscale_2 = nn.Conv2d(128, branch_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        self.tex_branch_downscale_3 = nn.Conv2d(256, branch_channels, kernel_size=(1, 1))
+        self.tex_branch_combine = nn.Conv2d(3*branch_channels, branch_channels, kernel_size=(1, 1))
+        self.texture_branch = Branch(branch_channels)
+        self.tex_branch_to_img = nn.Conv2d(branch_channels, 3, kernel_size=(1, 1))
         self.tex_branch_img = None
 
-        self.struct_branch_upscale_4 = nn.ConvTranspose2d(512, 512, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.struct_branch_upscale_5 = nn.ConvTranspose2d(512, 512, kernel_size=(4, 4), stride=(4, 4))
-        self.struct_branch_upscale_6 = nn.ConvTranspose2d(512, 512, kernel_size=(8, 8), stride=(8, 8))
-        self.struct_branch_combine = nn.Conv2d(3 * 512, 512, kernel_size=(1, 1))
-        self.structure_branch = Branch(512)
-        self.struct_branch_to_img = nn.Conv2d(512, 3, kernel_size=(1,1))
+        self.struct_branch_upscale_4 = nn.ConvTranspose2d(512, branch_channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        self.struct_branch_upscale_5 = nn.ConvTranspose2d(512, branch_channels, kernel_size=(4, 4), stride=(4, 4))
+        self.struct_branch_upscale_6 = nn.ConvTranspose2d(512, branch_channels, kernel_size=(8, 8), stride=(8, 8))
+        self.struct_branch_combine = nn.Conv2d(3 * branch_channels, branch_channels, kernel_size=(1, 1))
+        self.structure_branch = Branch(branch_channels)
+        self.struct_branch_to_img = nn.Conv2d(branch_channels, 3, kernel_size=(1,1))
         self.struct_branch_img = None
 
-        self.branch_combiner = nn.Conv2d(2 * 512, 512, kernel_size=(1, 1))
+        self.branch_combiner = nn.Conv2d(2 * branch_channels, branch_channels, kernel_size=(1, 1))
 
-        self.bpa = Bpa((1, 512, 32, 32))
+        self.bpa = Bpa((1, branch_channels, 32, 32))
 
-        self.branch_scale_6 = nn.Conv2d(512, 512, kernel_size=(8, 8), stride=(8, 8))
-        self.branch_scale_5 = nn.Conv2d(512, 512, kernel_size=(4, 4), stride=(4, 4))
-        self.branch_scale_4 = nn.Conv2d(512, 512, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.branch_scale_3 = nn.Conv2d(512, 256, kernel_size=(1, 1))
-        self.branch_scale_2 = nn.ConvTranspose2d(512, 128, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
-        self.branch_scale_1 = nn.ConvTranspose2d(512, 64, kernel_size=(4, 4), stride=(4, 4))
+        self.branch_scale_6 = nn.Conv2d(branch_channels, 512, kernel_size=(8, 8), stride=(8, 8))
+        self.branch_scale_5 = nn.Conv2d(branch_channels, 512, kernel_size=(4, 4), stride=(4, 4))
+        self.branch_scale_4 = nn.Conv2d(branch_channels, 512, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        self.branch_scale_3 = nn.Conv2d(branch_channels, 256, kernel_size=(1, 1))
+        self.branch_scale_2 = nn.ConvTranspose2d(branch_channels, 128, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1))
+        self.branch_scale_1 = nn.ConvTranspose2d(branch_channels, 64, kernel_size=(4, 4), stride=(4, 4))
 
         self.deconv6 = nn.ConvTranspose2d(512, 512, (4, 4), stride=(2, 2), padding=(1, 1))
         self.relu_de_6 = nn.ReLU()

@@ -42,7 +42,7 @@ class Branch(nn.Module):
 
     def set_mask(self, mask):
         n = mask.shape[0]
-        self.mask = F.interpolate(mask.reshape(n, 1, 256, 256).float(), size=(32, 32))
+        self.mask = 1 - F.interpolate(mask.reshape(n, 1, 256, 256).float(), size=(32, 32))
 
     def forward(self, f):
         stream_7 = self.stream7_1(f, mask_in=self.mask)

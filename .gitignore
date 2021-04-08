@@ -1,3 +1,4 @@
+MODEL
 tensorboard_logs/*
 data/*
 **.png
