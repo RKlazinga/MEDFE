@@ -16,8 +16,9 @@ ENABLED = {
     "reconstruction_out": True,
     "reconstruction_structure": True,
     "reconstruction_texture": True,
-    "style_percept": False,
-    "adversarial": False
+    "style": True,
+    "perceptual": True,
+    "adversarial": False,
 }
 
 to_tensor = transforms.ToTensor()
@@ -42,6 +43,7 @@ class StylePerceptualLoss(nn.Module):
             '18': "relu4_1",
             '25': "relu5_1",
         }
+        self.last_vgg_layer = max(int(k) for k in self.layer_name_mapping.keys())
 
         self.percept_loss1 = nn.L1Loss()
         self.percept_loss2 = nn.L1Loss()
@@ -74,7 +76,7 @@ class StylePerceptualLoss(nn.Module):
         # calculate the gram matrix
         gram = torch.matmul(tensor, tensor.transpose(1, 2))
 
-        return gram
+        return gram / (d * h * w)
 
     def forward(self, i_gt, i_out):
         """
@@ -88,33 +90,37 @@ class StylePerceptualLoss(nn.Module):
         activation_gt = {}
         activation_out = {}
 
-        for name, module in self.vgg_layers._modules.items():
-            i_gt = module(i_gt)
-            i_out = module(i_out)
-            if name in self.layer_name_mapping:
-                activation_gt[self.layer_name_mapping[name]] = i_gt
-                activation_out[self.layer_name_mapping[name]] = i_out
+        if ENABLED['style'] or ENABLED['perceptual']:
+            for name, module in self.vgg_layers._modules.items():
+                i_gt = module(i_gt)
+                i_out = module(i_out)
+                if name in self.layer_name_mapping:
+                    activation_gt[self.layer_name_mapping[name]] = i_gt
+                    activation_out[self.layer_name_mapping[name]] = i_out
+                if int(name) > self.last_vgg_layer:
+                    break
 
         percept_loss = 0
-        percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1'])
-        percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1'])
-        percept_loss += self.percept_loss3(activation_gt['relu3_1'], activation_out['relu3_1'])
-        percept_loss += self.percept_loss4(activation_gt['relu4_1'], activation_out['relu4_1'])
-        percept_loss += self.percept_loss5(activation_gt['relu5_1'], activation_out['relu5_1'])
-        percept_loss /= 5
-
-        gram_gt = {l: self.gram_matrix(x) for l, x in activation_gt.items()}
-        gram_out = {l: self.gram_matrix(x) for l, x in activation_out.items()}
+        if ENABLED['perceptual']:
+            percept_loss += self.percept_loss1(activation_gt['relu1_1'], activation_out['relu1_1'])
+            percept_loss += self.percept_loss2(activation_gt['relu2_1'], activation_out['relu2_1'])
+            percept_loss += self.percept_loss3(activation_gt['relu3_1'], activation_out['relu3_1'])
+            percept_loss += self.percept_loss4(activation_gt['relu4_1'], activation_out['relu4_1'])
+            percept_loss += self.percept_loss5(activation_gt['relu5_1'], activation_out['relu5_1'])
+            percept_loss /= 5
 
         style_loss = 0
-        style_loss += self.style_loss1(gram_gt['relu1_1'], gram_out['relu1_1'])
-        style_loss += self.style_loss2(gram_gt['relu2_1'], gram_out['relu2_1'])
-        style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
-        style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
-        style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
-        style_loss /= 5
+        if ENABLED['style']:
+            gram_gt = {l: self.gram_matrix(x) for l, x in activation_gt.items()}
+            gram_out = {l: self.gram_matrix(x) for l, x in activation_out.items()}
+            style_loss += self.style_loss1(gram_gt['relu1_1'], gram_out['relu1_1'])
+            style_loss += self.style_loss2(gram_gt['relu2_1'], gram_out['relu2_1'])
+            style_loss += self.style_loss3(gram_gt['relu3_1'], gram_out['relu3_1'])
+            style_loss += self.style_loss4(gram_gt['relu4_1'], gram_out['relu4_1'])
+            style_loss += self.style_loss5(gram_gt['relu5_1'], gram_out['relu5_1'])
+            style_loss /= 5
 
-        return percept_loss, style_loss
+        return style_loss, percept_loss
 
 
 class TotalLoss(nn.Module):
@@ -128,34 +134,35 @@ class TotalLoss(nn.Module):
 
         self.last_loss = {}
 
-    def forward(self, i_gt, i_st, i_ost, i_ote, i_out, i_gt_large, i_out_large):
+    def forward(self, i_gt_small, i_st, i_ost, i_ote, i_gt_large, i_out_large):
         """
         Compute the total loss. All input images are 3x32x32 tensors unless specified otherwise.
 
-        :param i_gt: Ground truth image (unmasked)
+        :param i_gt_small: Ground truth image (unmasked)
         :param i_st: 'Structure Image' of i_gt
         :param i_ost: Output of structure branch, mapped to RGB using a 1x1 convolution
         :param i_ote: Output of texture branch, mapped to RGB using a 1x1 convolution
-        :param i_out: Final predicted image
         :param i_gt_large: Ground truth image (unmasked, 3x256x256)
         :param i_out_large: Output image (3x256x256)
         :return: Scalar loss
         """
         self.last_loss = {}
 
+        if ENABLED['style'] or ENABLED['perceptual']:
+            style_loss, percept_loss = self.style_percept_loss(i_gt_large, i_out_large)
+
         for loss_name, is_enabled in ENABLED.items():
             if is_enabled:
                 if loss_name == "reconstruction_out":
                     self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out_large, i_gt_large)
                 if loss_name == "reconstruction_texture":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt)
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt_small)
                 if loss_name == "reconstruction_structure":
                     self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_rst(i_ost, i_st)
-                if loss_name == "style_percept":
-                    style_loss, percept_loss = self.style_percept_loss(i_gt_large, i_out_large)
-
-                    self.last_loss["style"] = LAMBDA["style"] * style_loss
-                    self.last_loss["perceptual"] = LAMBDA["perceptual"] * percept_loss
+                if loss_name == "style":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * style_loss
+                if loss_name == "perceptual":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * percept_loss
                 if loss_name == "adversarial":
                     raise NotImplementedError()
 
