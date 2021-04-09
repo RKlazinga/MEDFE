@@ -119,17 +119,25 @@ def main(args):
             optimiser.zero_grad()
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
-            out = model(batch["masked_image"])
 
             gt256 = batch["gt"]
             gt32 = interpolate(gt256, 32)
+            out = model(batch["masked_image"])
+
+            # only apply out image to masked area
+            print(gt256.shape)
+            print(model.mask.shape)
+            mask = model.mask.reshape(model.mask.shape[0], 1, model.mask.shape[1], model.mask.shape[2])
+            out = gt256 * mask + out * (1 - mask)
+
             single_loss = criterion(
                 gt32,
                 batch["gt_smooth"],
                 model.struct_branch_img,
                 model.tex_branch_img,
                 gt256,
-                out
+                out,
+                256*256 - torch.sum(model.mask[0])
             )
             single_loss.backward()
             optimiser.step()

@@ -16,8 +16,8 @@ ENABLED = {
     "reconstruction_out": True,
     "reconstruction_structure": True,
     "reconstruction_texture": True,
-    "style": True,
-    "perceptual": True,
+    "style": False,
+    "perceptual": False,
     "adversarial": False,
 }
 
@@ -134,7 +134,7 @@ class TotalLoss(nn.Module):
 
         self.last_loss = {}
 
-    def forward(self, i_gt_small, i_st, i_ost, i_ote, i_gt_large, i_out_large):
+    def forward(self, i_gt_small, i_st, i_ost, i_ote, i_gt_large, i_out_large, mask_size):
         """
         Compute the total loss. All input images are 3x32x32 tensors unless specified otherwise.
 
@@ -144,6 +144,7 @@ class TotalLoss(nn.Module):
         :param i_ote: Output of texture branch, mapped to RGB using a 1x1 convolution
         :param i_gt_large: Ground truth image (unmasked, 3x256x256)
         :param i_out_large: Output image (3x256x256)
+        :param mask_size: Number of masked pixels
         :return: Scalar loss
         """
         self.last_loss = {}
@@ -155,6 +156,9 @@ class TotalLoss(nn.Module):
             if is_enabled:
                 if loss_name == "reconstruction_out":
                     self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out_large, i_gt_large)
+                    # scale the reconstruction loss by all the pixels that were unmasked,
+                    # and that should therefore not contribute to a low L1Loss
+                    self.last_loss[loss_name] *= (256 * 256) / mask_size
                 if loss_name == "reconstruction_texture":
                     self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt_small)
                 if loss_name == "reconstruction_structure":

@@ -52,11 +52,22 @@ class MEDFE(nn.Module):
         self.bpa = Bpa((1, branch_channels, 32, 32))
 
         self.branch_scale_6 = ConvUnit(branch_channels, 8 * channels, kernel_size=(8, 8), stride=(8, 8), use_batch_norm=False)
+        self.branch_scale_6_bn = nn.BatchNorm2d(8 * channels)
+
         self.branch_scale_5 = ConvUnit(branch_channels, 8 * channels, kernel_size=(4, 4), stride=(4, 4), use_batch_norm=False)
+        self.branch_scale_5_bn = nn.BatchNorm2d(8 * channels)
+
         self.branch_scale_4 = ConvUnit(branch_channels, 8 * channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), use_batch_norm=False)
+        self.branch_scale_4_bn = nn.BatchNorm2d(8 * channels)
+
         self.branch_scale_3 = ConvUnit(branch_channels, 4 * channels, kernel_size=(1, 1), use_batch_norm=False)
+        self.branch_scale_3_bn = nn.BatchNorm2d(4 * channels)
+
         self.branch_scale_2 = DeConvUnit(branch_channels, 2 * channels, kernel_size=(4, 4), stride=(2, 2), padding=(1, 1), use_batch_norm=False)
+        self.branch_scale_2_bn = nn.BatchNorm2d(2 * channels)
+
         self.branch_scale_1 = DeConvUnit(branch_channels, channels, kernel_size=(4, 4), stride=(4, 4), use_batch_norm=False)
+        self.branch_scale_1_bn = nn.BatchNorm2d(channels)
 
         self.deconv6 = DeConvUnit(8 * channels, 8 * channels, (4, 4), stride=(2, 2), padding=(1, 1))
         self.deconv5 = DeConvUnit(16 * channels, 8 * channels, (4, 4), stride=(2, 2), padding=(1, 1))
@@ -122,12 +133,12 @@ class MEDFE(nn.Module):
             if self.use_bpa:
                 f_sf = self.bpa(f_sf)
 
-            x_res = x_res4 + self.branch_scale_6(f_sf)
-            x5_skip = x5 + self.branch_scale_5(f_sf)
-            x4_skip = x4 + self.branch_scale_4(f_sf)
-            x3_skip = x3 + self.branch_scale_3(f_sf)
-            x2_skip = x2 + self.branch_scale_2(f_sf)
-            x1_skip = x1 + self.branch_scale_1(f_sf)
+            x_res = self.branch_scale_6_bn(x_res4 + self.branch_scale_6(f_sf))
+            x5_skip = self.branch_scale_5_bn(x5 + self.branch_scale_5(f_sf))
+            x4_skip = self.branch_scale_4_bn(x4 + self.branch_scale_4(f_sf))
+            x3_skip = self.branch_scale_3_bn(x3 + self.branch_scale_3(f_sf))
+            x2_skip = self.branch_scale_2_bn(x2 + self.branch_scale_2(f_sf))
+            x1_skip = self.branch_scale_1_bn(x1 + self.branch_scale_1(f_sf))
         else:
             x_res = x_res4
             x5_skip = x5.clone()
