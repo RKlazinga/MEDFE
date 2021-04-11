@@ -1,17 +1,20 @@
 import argparse
 import tkinter as tk
 import gc
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import torch
 from torch import optim
 from torch.nn.functional import interpolate
 from torch.utils import data
 from torchvision import transforms
+from torch.distributions import Uniform
+import torch.autograd
 
 from dataset import CustomDataset
 from loss import TotalLoss
 from network.network import MEDFE
+from network.wgan import Discriminator
 
 
 class OutputRenderer:
@@ -40,7 +43,7 @@ class OutputRenderer:
         self.collage = tk.Label(self.win)
         self.collage.pack()
 
-    def update(self, batch, out):
+    def update(self, batch, out, out_sliced: Optional):
         import PIL.Image
         import PIL.ImageTk
 
@@ -53,17 +56,27 @@ class OutputRenderer:
 
         im_masked_image = to_im_shape(batch['masked_image'])
         im_gt = to_im_shape(batch['gt'])
-        im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
         im_st = im_te = None
         if self.model.struct_branch_img is not None:
             im_st = to_im_shape(self.model.struct_branch_img, 32, 32)
             im_te = to_im_shape(self.model.tex_branch_img, 32, 32)
         im_out = to_im_shape(out)
+        im_gt_sliced = im_out_sliced = im_gt_smooth = None
+        if out_sliced is not None:
+            slice_shape = batch['gt_sliced'].shape
+            im_gt_sliced = to_im_shape(batch['gt_sliced'], slice_shape[2], slice_shape[3])
+            im_out_sliced = to_im_shape(out_sliced, slice_shape[2], slice_shape[3])
+        else:
+            im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
 
         im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
         im.paste(self.to_pil(im_masked_image), (0, 0))
         im.paste(self.to_pil(im_gt), (256, 0))
-        im.paste(CustomDataset.scale(self.to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
+        if out_sliced is not None:
+            im.paste(self.to_pil(im_gt_sliced), (512, 0))
+            im.paste(self.to_pil(im_out_sliced), (512 + 128, 0))
+        else:
+            im.paste(CustomDataset.scale(self.to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
         if self.model.struct_branch_img is not None:
             im.paste(CustomDataset.scale(self.to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
             im.paste(CustomDataset.scale(self.to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
@@ -87,6 +100,59 @@ class OutputRenderer:
         self.win.update()
 
 
+def train_discriminator(wgan: Discriminator, optimizer: optim.Optimizer, gt, out):
+    assert not any(p.requires_grad for p in wgan.parameters())
+
+    with wgan.with_grad():
+        optimizer.zero_grad()
+        wgan.zero_grad()
+
+        gt_v = gt.detach()
+        gt_v.requires_grad = True
+        loss_real = wgan(gt_v)
+        loss_real = loss_real.mean()
+
+        out_v = out.detach()
+        out_v.requires_grad = True
+        loss_fake = wgan(out_v)
+        loss_fake = loss_fake.mean()
+
+        gradient_penalty = calc_gradient_penalty(wgan, gt.data, out.data)
+
+        loss = loss_fake - loss_real + gradient_penalty
+        loss.backward()
+
+        optimizer.step()
+
+    assert not any(p.requires_grad for p in wgan.parameters())
+
+    wasserstein = loss_real - loss_fake
+
+    print(f"{wgan.name}: loss_real = {loss_real}; loss_fake = {loss_fake}; loss = {loss}; wasserstein = {wasserstein}")
+    print([*wgan.parameters()])
+
+
+def calc_gradient_penalty(wgan: Discriminator, real, fake, λ: float = 10):
+    assert real.shape == fake.shape
+    n, c, h, w = real.shape
+
+    eta = Uniform(0, 1).sample((n, 1, 1, 1)).expand(n, c, h, w)
+    interpolated = eta * real + (1 - eta) * fake
+    interpolated.requires_grad = True
+
+    prob_interpolated = wgan(interpolated)
+
+    grad = torch.autograd.grad(
+        outputs=prob_interpolated,
+        inputs=interpolated,
+        grad_outputs=torch.ones(prob_interpolated.size()),
+        create_graph=True,
+        retain_graph=True
+    )[0]
+
+    return ((grad.norm(2, dim=1) - 1) ** 2).mean() * λ
+
+
 def main(args):
     device_name = 'cpu'
     if args.cuda:
@@ -101,22 +167,32 @@ def main(args):
     training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
     train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    model = MEDFE(branch_channels=64,
-                  channels=8).to(device)
+    model = MEDFE(branch_channels=64, channels=8).to(device)
+    wgan_global = Discriminator((args.batch_size, 3, 256, 256), name='global')
+    wgan_local = None
+    if training_set.mask_is_rect():
+        wgan_local = Discriminator((args.batch_size, 3, training_set.mask[2], training_set.mask[3]), name='local')
+
     optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
-    criterion = TotalLoss()
+    wgan_global_optimizer = optim.Adam(wgan_global.parameters(), lr=args.learning_rate)
+    wgan_local_optimizer = None
+    if training_set.mask_is_rect():
+        wgan_local_optimizer = optim.Adam(wgan_local.parameters(), lr=args.learning_rate)
+
+    criterion = TotalLoss(wgan_global, wgan_local)
 
     renderer = None
     if args.output_intermediates:
         renderer = OutputRenderer(args, model, train_loader)
 
-    for epoch in range(1000):
+    for epoch in range(1):
         loss = 0
         loss_components = {}
         for batch_idx, batch in enumerate(train_loader):
             gc.collect()
 
             optimiser.zero_grad()
+
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
 
@@ -125,22 +201,35 @@ def main(args):
             out = model(batch["masked_image"])
 
             # only apply out image to masked area
-            print(gt256.shape)
-            print(model.mask.shape)
             mask = model.mask.reshape(model.mask.shape[0], 1, model.mask.shape[1], model.mask.shape[2])
-            out = gt256 * mask + out * (1 - mask)
+            out = (gt256 * mask + out * (1 - mask)).float()
+
+            # Train discriminators
+            train_discriminator(wgan_global, wgan_global_optimizer, gt256, out)
+
+            out_sliced = None
+            if training_set.mask_is_rect():
+                out_sliced = training_set.slice_mask(out)
+                train_discriminator(wgan_local, wgan_local_optimizer, batch['gt_sliced'], out_sliced)
 
             single_loss = criterion(
+                epoch,
                 gt32,
                 batch["gt_smooth"],
                 model.struct_branch_img,
                 model.tex_branch_img,
                 gt256,
                 out,
-                256*256 - torch.sum(model.mask[0])
+                batch['gt_sliced'],
+                out_sliced,
+                256*256 - torch.sum(model.mask[0]),
             )
+            print('UNOPTIMIZED')
+            print([p for p in wgan_global.parameters()])
             single_loss.backward()
             optimiser.step()
+            print('OPTIMIZED')
+            print([*wgan_global.parameters()])
             loss += single_loss.item()
             for k, v in criterion.last_loss.items():
                 loss_components[k] = loss_components.get(k, 0) + v
@@ -151,7 +240,7 @@ def main(args):
                     {k: v.item() for k, v in criterion.last_loss.items()}
                 )
 
-                renderer.update(batch, out)
+                renderer.update(batch, out, out_sliced)
 
         loss /= len(train_loader)
 

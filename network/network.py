@@ -2,10 +2,10 @@ from torch import nn
 import torch
 
 
-from branch import Branch
+from network.branch import Branch
 from network.conv_unit import ConvUnit, DeConvUnit
 from res_block import ResBlock
-from bpa import Bpa
+from network.bpa import Bpa
 
 
 class MEDFE(nn.Module):
