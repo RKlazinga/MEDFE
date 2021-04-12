@@ -1,6 +1,7 @@
 import torch.nn as nn
 import traceback
 
+
 class Discriminator(nn.Module):
     def __init__(self, shape, name: str = None):
         super().__init__()

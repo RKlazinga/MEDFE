@@ -133,6 +133,8 @@ class MEDFE(nn.Module):
             if self.use_bpa:
                 f_sf = self.bpa(f_sf)
 
+            f_sf = f_sf * self.structure_branch.mask
+
             x_res = self.branch_scale_6_bn(x_res4 + self.branch_scale_6(f_sf))
             x5_skip = self.branch_scale_5_bn(x5 + self.branch_scale_5(f_sf))
             x4_skip = self.branch_scale_4_bn(x4 + self.branch_scale_4(f_sf))

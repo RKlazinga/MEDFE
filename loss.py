@@ -17,9 +17,9 @@ LAMBDA = {
 }
 
 ENABLED = {
-    "reconstruction_out": False,
-    "reconstruction_structure": False,
-    "reconstruction_texture": False,
+    "reconstruction_out": True,
+    "reconstruction_structure": True,
+    "reconstruction_texture": True,
     "style": False,
     "perceptual": False,
     "adversarial": True,
@@ -190,16 +190,19 @@ class TotalLoss(nn.Module):
                 return torch.sigmoid(xa - xb.mean())
 
             def l(wgan: Discriminator, xr, xf):
+                assert not any(p.requires_grad for p in wgan.parameters())
                 yr = wgan(xr)
                 yf = wgan(xf)
                 for i in range(yr.shape[0]):
                     print(f"{wgan.name} says real is {yr[i].item()} and fake is {yf[i].item()}")
-                return -torch.log(1 - d(yr, yf)).mean() - torch.log(d(yf, yr)).mean()
+                return -torch.log(1 - d(yr, yf) + 0.0001).mean() - torch.log(d(yf, yr) + 0.0001).mean()
 
             loss = l(self.wgan_global, i_gt_large, i_out_large)
-            if self.wgan_local:
+            if self.wgan_local is not None:
                 loss += l(self.wgan_local, i_gt_sliced, i_out_sliced)
             else:
                 # Compensate for missing local loss
                 loss *= 2
+
+            assert not torch.isnan(loss)
             return loss
