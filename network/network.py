@@ -4,7 +4,7 @@ import torch
 
 from network.branch import Branch
 from network.conv_unit import ConvUnit, DeConvUnit
-from res_block import ResBlock
+from network.res_block import ResBlock
 from network.bpa import Bpa
 
 

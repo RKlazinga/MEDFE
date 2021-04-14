@@ -111,13 +111,13 @@ def train_discriminator(wgan: Discriminator, optimizer: optim.Optimizer, gt, out
 
         loss_real = wgan(gt.detach())
         loss_real = loss_real.mean()
-        (1 - loss_real).backward()
+        loss_real.backward(mone)
 
         loss_fake = wgan(out.detach())
         loss_fake = loss_fake.mean()
-        loss_fake.backward()
+        loss_fake.backward(one)
 
-        gradient_penalty = calc_gradient_penalty(wgan, gt.detach(), out.detach())
+        gradient_penalty = calc_gradient_penalty(wgan, real=gt.detach(), fake=out.detach())
         gradient_penalty.backward()
 
         optimizer.step()
@@ -131,11 +131,11 @@ def train_discriminator(wgan: Discriminator, optimizer: optim.Optimizer, gt, out
 
 
 def calc_gradient_penalty(wgan: Discriminator, real, fake, lambda_: float = 10):
-    assert real.shape == fake.shape
-    n, c, h, w = real.shape
+    assert real.shape[1:] == fake.shape[1:]
+    n, c, h, w = fake.shape
 
     eta = Uniform(0, 1).sample((n, 1, 1, 1)).expand(n, c, h, w)
-    interpolated = eta * real + (1 - eta) * fake
+    interpolated = eta * real[-n:] + (1 - eta) * fake
     interpolated.requires_grad = True
 
     prob_interpolated = wgan(interpolated)
@@ -145,8 +145,11 @@ def calc_gradient_penalty(wgan: Discriminator, real, fake, lambda_: float = 10):
         inputs=interpolated,
         grad_outputs=torch.ones(prob_interpolated.size()),
         create_graph=True,
-        retain_graph=True
+        retain_graph=True,
+        only_inputs=True
     )[0]
+
+    grad = grad.view(grad.shape[0], -1)
 
     return ((grad.norm(2, dim=1) - 1) ** 2).mean() * lambda_
 
@@ -165,17 +168,18 @@ def main(args):
     training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
     train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    model = MEDFE(branch_channels=128, channels=16).to(device)
+    model = MEDFE(branch_channels=256, channels=32).to(device)
     wgan_global = Discriminator((args.batch_size, 3, 256, 256), name='global')
     wgan_local = None
-    if training_set.mask_is_rect() and False:
+    if training_set.mask_is_rect():
         wgan_local = Discriminator((args.batch_size, 3, training_set.mask[2], training_set.mask[3]), name='local')
+    wgan_global_real_hist = None
 
     optimiser = optim.Adam(model.parameters(), lr=args.learning_rate)
-    wgan_global_optimizer = optim.Adam(wgan_global.parameters(), lr=args.learning_rate)
+    wgan_global_optimizer = optim.Adam(wgan_global.parameters(), lr=1e-4, betas=(0.5, 0.999))
     wgan_local_optimizer = None
     if wgan_local is not None:
-        wgan_local_optimizer = optim.Adam(wgan_local.parameters(), lr=args.learning_rate)
+        wgan_local_optimizer = optim.Adam(wgan_local.parameters(), lr=1e-4, betas=(0.5, 0.999))
 
     criterion = TotalLoss(wgan_global, wgan_local)
 
@@ -189,6 +193,8 @@ def main(args):
         for batch_idx, batch in enumerate(train_loader):
             gc.collect()
 
+            optimiser.zero_grad()
+
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
 
@@ -196,23 +202,22 @@ def main(args):
             gt32 = interpolate(gt256, 32)
             out = model(batch["masked_image"])
 
-            optimiser.zero_grad()
-
             # only apply out image to masked area
             mask = model.mask.reshape(model.mask.shape[0], 1, model.mask.shape[1], model.mask.shape[2])
             out = (gt256 * mask + out * (1 - mask)).float()
 
             # Train discriminators
-            train_discriminator(wgan_global, wgan_global_optimizer, gt256, out)
-
-            optimiser.zero_grad()
+            if wgan_global_real_hist is None:
+                wgan_global_real_hist = gt256.detach()
+            if wgan_global_real_hist.shape[0] > 4 * args.batch_size:
+                wgan_global_real_hist = wgan_global_real_hist[:-4 * args.batch_size]
+            wgan_global_real_hist = torch.cat((wgan_global_real_hist, gt256.detach()), dim=0)
+            train_discriminator(wgan_global, wgan_global_optimizer, gt=wgan_global_real_hist, out=out)
 
             out_sliced = None
             if wgan_local is not None:
-                out_sliced = training_set.slice_mask(out)
-                train_discriminator(wgan_local, wgan_local_optimizer, batch['gt_sliced'], out_sliced)
-
-            optimiser.zero_grad()
+                out_sliced = training_set.slice_mask(out.detach())
+                train_discriminator(wgan_local, wgan_local_optimizer, gt=batch['gt_sliced'], out=out_sliced)
 
             single_loss = criterion(
                 epoch,
@@ -252,7 +257,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--train-size', default=5000, type=int, help='the number of images to train with')
     parser.add_argument('--batch-size', default=50, type=int, help='the number of images to train with in a single batch')
-    parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
+    parser.add_argument('--learning-rate', default=2e-4, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')
     parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')
 

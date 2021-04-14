@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from partial_conv import PartialConv2d
+from network.partial_conv import PartialConv2d
 
 
 class Branch(nn.Module):
@@ -137,4 +137,4 @@ class Branch(nn.Module):
         concat = torch.cat((stream_3, stream_5, stream_7), dim=1)
         combined = self.combining_conv(concat)
 
-        return self.combine_batch_norm(self.combine_relu(combined))
+        return combined
