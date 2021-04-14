@@ -180,6 +180,7 @@ def main(args):
     wgan_local_optimizer = None
     if wgan_local is not None:
         wgan_local_optimizer = optim.Adam(wgan_local.parameters(), lr=1e-4, betas=(0.5, 0.999))
+    wgan_local_real_hist = None
 
     criterion = TotalLoss(wgan_global, wgan_local)
 
@@ -208,16 +209,21 @@ def main(args):
 
             # Train discriminators
             if wgan_global_real_hist is None:
-                wgan_global_real_hist = gt256.detach()
+                wgan_global_real_hist = gt256
             if wgan_global_real_hist.shape[0] > 4 * args.batch_size:
                 wgan_global_real_hist = wgan_global_real_hist[:-4 * args.batch_size]
-            wgan_global_real_hist = torch.cat((wgan_global_real_hist, gt256.detach()), dim=0)
+            wgan_global_real_hist = torch.cat((wgan_global_real_hist, gt256), dim=0).detach()
             train_discriminator(wgan_global, wgan_global_optimizer, gt=wgan_global_real_hist, out=out)
 
             out_sliced = None
             if wgan_local is not None:
+                if wgan_local_real_hist is None:
+                    wgan_local_real_hist = batch['gt_sliced']
+                if wgan_local_real_hist.shape[0] > 4 * args.batch_size:
+                    wgan_local_real_hist = wgan_local_real_hist[:-4 * args.batch_size]
+                wgan_local_real_hist = wgan_local_real_hist.detach()
                 out_sliced = training_set.slice_mask(out.detach())
-                train_discriminator(wgan_local, wgan_local_optimizer, gt=batch['gt_sliced'], out=out_sliced)
+                train_discriminator(wgan_local, wgan_local_optimizer, gt=wgan_local_real_hist, out=out_sliced)
 
             single_loss = criterion(
                 epoch,
