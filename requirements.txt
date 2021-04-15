@@ -1,4 +1,8 @@
-torch==1.8.1
-torchvision==0.9.1
+torch~=1.8.0+cpu
+torchvision~=0.9.0+cpu
 tensorboard==2.4.1
 matplotlib==3.4.1
+
+future~=0.17.1
+Pillow~=6.0.0
+numpy~=1.18.5

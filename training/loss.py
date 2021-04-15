@@ -1,11 +1,9 @@
-from typing import Union, Tuple
-
 import torch
 from torch import nn
 from torchvision import transforms
 import torchvision.models.vgg as vgg
 
-from network.wgan import Discriminator
+from training.wgan import Discriminator
 
 LAMBDA = {
     "reconstruction_out": 1,
@@ -26,6 +24,87 @@ ENABLED = {
 }
 
 to_tensor = transforms.ToTensor()
+
+
+class TotalLoss(nn.Module):
+    """
+    Loss module that combines all loss functions used in the paper.
+    These can be turned on and off using the settings above.
+    """
+    def __init__(self, wgan_global: Discriminator, wgan_local: Discriminator):
+        super().__init__()
+
+        self.wgan_global = wgan_global
+        self.wgan_local = wgan_local
+
+        self.loss_rst = nn.L1Loss()
+        self.lost_rte = nn.L1Loss()
+        self.loss_re = nn.L1Loss()
+        self.style_percept_loss = StylePerceptualLoss()
+
+        self.last_loss = {}
+
+    def forward(self, i_gt_small, i_st, i_ost, i_ote, i_gt_large, i_out_large, i_gt_sliced, i_out_sliced, mask_size):
+        """
+        Compute the total loss. All input images are 3x32x32 tensors unless specified otherwise.
+
+        :param i_gt_small: Ground truth image (unmasked)
+        :param i_st: 'Structure Image' of i_gt
+        :param i_ost: Output of structure branch, mapped to RGB using a 1x1 convolution
+        :param i_ote: Output of texture branch, mapped to RGB using a 1x1 convolution
+        :param i_gt_large: Ground truth image (unmasked, 3x256x256)
+        :param i_out_large: Output image (3x256x256)
+        :param i_gt_sliced: Ground trunth sliced to mask shape
+        :param i_out_sliced: Output image sliced to mask shape
+        :param mask_size: Number of masked pixels
+        :return: Scalar loss
+        """
+        self.last_loss = {}
+
+        if ENABLED['style'] or ENABLED['perceptual']:
+            style_loss, percept_loss = self.style_percept_loss(i_gt_large, i_out_large)
+
+        for loss_name, is_enabled in ENABLED.items():
+            if is_enabled:
+                if loss_name == "reconstruction_out":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out_large, i_gt_large)
+                    # scale the reconstruction loss by all the pixels that were unmasked,
+                    # and that should therefore not contribute to a low L1Loss
+                    self.last_loss[loss_name] *= (256 * 256) / mask_size
+                if loss_name == "reconstruction_texture":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt_small)
+                if loss_name == "reconstruction_structure":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_rst(i_ost, i_st)
+                if loss_name == "style":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * style_loss
+                if loss_name == "perceptual":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * percept_loss
+                if loss_name == "adversarial":
+                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.calc_adversarial(
+                        i_gt_large, i_out_large, i_gt_sliced, i_out_sliced
+                    )
+        return sum(self.last_loss.values())
+
+    def calc_adversarial(self, i_gt_large, i_out_large, i_gt_sliced, i_out_sliced):
+        if ENABLED['adversarial']:
+            def d(xa, xb):
+                return torch.sigmoid(xa - xb.mean())
+
+            def l(wgan: Discriminator, xr, xf):
+                assert not any(p.requires_grad for p in wgan.parameters())
+                yr = wgan(xr)
+                yf = wgan(xf)
+                return -torch.log(1 - d(yr, yf) + 0.0001).mean() - torch.log(d(yf, yr) + 0.0001).mean()
+
+            loss = l(self.wgan_global, i_gt_large, i_out_large)
+            if self.wgan_local is not None:
+                loss += l(self.wgan_local, i_gt_sliced, i_out_sliced)
+            else:
+                # Compensate for missing local loss
+                loss *= 2
+
+            assert not torch.isnan(loss)
+            return loss
 
 
 class StylePerceptualLoss(nn.Module):
@@ -90,7 +169,6 @@ class StylePerceptualLoss(nn.Module):
         :param i_out: 3x256x256 tensor, the output of the network on the masked image
         :return: A float
         """
-
         activation_gt = {}
         activation_out = {}
 
@@ -127,82 +205,3 @@ class StylePerceptualLoss(nn.Module):
         return style_loss, percept_loss
 
 
-class TotalLoss(nn.Module):
-    def __init__(self, wgan_global: Discriminator, wgan_local: Discriminator):
-        super().__init__()
-
-        self.wgan_global = wgan_global
-        self.wgan_local = wgan_local
-
-        self.loss_rst = nn.L1Loss()
-        self.lost_rte = nn.L1Loss()
-        self.loss_re = nn.L1Loss()
-        self.style_percept_loss = StylePerceptualLoss()
-
-        self.last_loss = {}
-
-    def forward(self, epoch: int, i_gt_small, i_st, i_ost, i_ote, i_gt_large, i_out_large, i_gt_sliced, i_out_sliced, mask_size):
-        """
-        Compute the total loss. All input images are 3x32x32 tensors unless specified otherwise.
-
-        :param epoch: The current epoch
-        :param i_gt_small: Ground truth image (unmasked)
-        :param i_st: 'Structure Image' of i_gt
-        :param i_ost: Output of structure branch, mapped to RGB using a 1x1 convolution
-        :param i_ote: Output of texture branch, mapped to RGB using a 1x1 convolution
-        :param i_gt_large: Ground truth image (unmasked, 3x256x256)
-        :param i_out_large: Output image (3x256x256)
-        :param i_gt_sliced: Ground trunth sliced to mask shape
-        :param i_out_sliced: Output image sliced to mask shape
-        :param mask_size: Number of masked pixels
-        :return: Scalar loss
-        """
-        self.last_loss = {}
-
-        if ENABLED['style'] or ENABLED['perceptual']:
-            style_loss, percept_loss = self.style_percept_loss(i_gt_large, i_out_large)
-
-        for loss_name, is_enabled in ENABLED.items():
-            if is_enabled:
-                if loss_name == "reconstruction_out":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_re(i_out_large, i_gt_large)
-                    # scale the reconstruction loss by all the pixels that were unmasked,
-                    # and that should therefore not contribute to a low L1Loss
-                    self.last_loss[loss_name] *= (256 * 256) / mask_size
-                if loss_name == "reconstruction_texture":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.lost_rte(i_ote, i_gt_small)
-                if loss_name == "reconstruction_structure":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.loss_rst(i_ost, i_st)
-                if loss_name == "style":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * style_loss
-                if loss_name == "perceptual":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * percept_loss
-                if loss_name == "adversarial":
-                    self.last_loss[loss_name] = LAMBDA[loss_name] * self.calc_adversarial(
-                        epoch, i_gt_large, i_out_large, i_gt_sliced, i_out_sliced
-                    )
-
-        return sum(self.last_loss.values())
-
-    def calc_adversarial(self, epoch, i_gt_large, i_out_large, i_gt_sliced, i_out_sliced):
-        if ENABLED['adversarial']:
-            def d(xa, xb):
-                return torch.sigmoid(xa - xb.mean())
-
-            def l(wgan: Discriminator, xr, xf):
-                assert not any(p.requires_grad for p in wgan.parameters())
-                yr = wgan(xr)
-                yf = wgan(xf)
-                for i in range(yr.shape[0]):
-                    print(f"{wgan.name} says real is {yr[i].item()} and fake is {yf[i].item()}")
-                return -torch.log(1 - d(yr, yf) + 0.0001).mean() - torch.log(d(yf, yr) + 0.0001).mean()
-
-            loss = l(self.wgan_global, i_gt_large, i_out_large)
-            if self.wgan_local is not None:
-                loss += l(self.wgan_local, i_gt_sliced, i_out_sliced)
-            else:
-                # Compensate for missing local loss
-                loss *= 2
-
-            assert not torch.isnan(loss)
-            return loss

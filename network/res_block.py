@@ -3,6 +3,9 @@ import torch
 
 
 class ResBlock(nn.Module):
+    """
+    Residual block. Preserves size of input tensor.
+    """
     def __init__(self, in_size, out_size, kernel_size, dilation):
         super().__init__()
         self.in_size = in_size

@@ -1,160 +1,30 @@
 import argparse
-import tkinter as tk
 import gc
-from typing import List, Dict, Optional
 
 import torch
 from torch import optim
 from torch.nn.functional import interpolate
 from torch.utils import data
-from torchvision import transforms
-from torch.distributions import Uniform
 import torch.autograd
 
-from dataset import CustomDataset
-from loss import TotalLoss
-from network.network import MEDFE
-from network.wgan import Discriminator
+from training.dataset import CustomDataset
+from display.output_renderer import OutputRenderer
+from training.loss import TotalLoss
+from network.medfe import MEDFE
+from training.wgan import Discriminator, train_discriminator
 
 
-class OutputRenderer:
-    def __init__(self, args, model: MEDFE, train_loader: data.DataLoader):
-        import matplotlib.figure
-        from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
-        matplotlib.use('TkAgg')
-
-        self.args = args
-        self.model = model
-        self.train_loader = train_loader
-
-        self.loss_history: List[float] = []
-        self.loss_components_history: List[Dict] = []
-
-        self.to_pil = transforms.ToPILImage()
-
-        self.win = tk.Tk()
-
-        self.fig = matplotlib.figure.Figure(figsize=(8, 5))
-        self.loss_ax = self.fig.add_subplot(111)
-        self.fig_canvas = FigureCanvasTkAgg(self.fig, self.win)
-        self.fig_canvas.get_tk_widget().pack(side=tk.RIGHT)
-
-        self.collage = tk.Label(self.win)
-        self.collage.pack()
-
-    def update(self, batch, out, out_sliced: Optional):
-        import PIL.Image
-        import PIL.ImageTk
-
-        def to_im_shape(t: torch.Tensor, x: int = 256, y: int = 256):
-            first_in_batch = t.split([1, self.args.batch_size - 1], dim=0)[0]
-            unmasked = first_in_batch
-            if first_in_batch.shape[1] == 4:
-                unmasked = first_in_batch.split([3, 1], dim=1)[0]
-            return torch.clamp(unmasked.reshape(3, x, y), 0, 1)
-
-        im_masked_image = to_im_shape(batch['masked_image'])
-        im_gt = to_im_shape(batch['gt'])
-        im_st = im_te = None
-        if self.model.struct_branch_img is not None:
-            im_st = to_im_shape(self.model.struct_branch_img, 32, 32)
-            im_te = to_im_shape(self.model.tex_branch_img, 32, 32)
-        im_out = to_im_shape(out)
-        im_gt_sliced = im_out_sliced = im_gt_smooth = None
-        if out_sliced is not None:
-            slice_shape = batch['gt_sliced'].shape
-            im_gt_sliced = to_im_shape(batch['gt_sliced'], slice_shape[2], slice_shape[3])
-            im_out_sliced = to_im_shape(out_sliced, slice_shape[2], slice_shape[3])
-        else:
-            im_gt_smooth = to_im_shape(batch['gt_smooth'], 32, 32)
-
-        im = PIL.Image.new('RGB', (3 * 256, 2 * 256))
-        im.paste(self.to_pil(im_masked_image), (0, 0))
-        im.paste(self.to_pil(im_gt), (256, 0))
-        if out_sliced is not None:
-            im.paste(self.to_pil(im_gt_sliced), (512, 0))
-            im.paste(self.to_pil(im_out_sliced), (512 + 128, 0))
-        else:
-            im.paste(CustomDataset.scale(self.to_pil(im_gt_smooth), 256, resample_method=PIL.Image.NEAREST), (512, 0))
-        if self.model.struct_branch_img is not None:
-            im.paste(CustomDataset.scale(self.to_pil(im_st), 256, resample_method=PIL.Image.NEAREST), (0, 256))
-            im.paste(CustomDataset.scale(self.to_pil(im_te), 256, resample_method=PIL.Image.NEAREST), (256, 256))
-        im.paste(self.to_pil(im_out), (512, 256))
-
-        tkimg = PIL.ImageTk.PhotoImage(im)
-        self.collage.configure(image=tkimg)
-        self.collage.image = self.collage
-
-        self.loss_ax.clear()
-        history_x = [i / len(self.train_loader) for i in range(0, len(self.loss_history))]
-        for loss_type in self.loss_components_history[0].keys():
-            self.loss_ax.plot(
-                history_x, [l[loss_type] for l in self.loss_components_history],
-                label=loss_type,
-            )
-        self.loss_ax.plot(history_x, self.loss_history, 'k', linewidth=2, label='total')
-        self.loss_ax.legend(loc='upper right')
-        self.fig_canvas.draw()
-
-        self.win.update()
-
-
-def train_discriminator(wgan: Discriminator, optimizer: optim.Optimizer, gt, out):
-    assert not any(p.requires_grad for p in wgan.parameters())
-
-    with wgan.with_grad():
-        one = torch.tensor(1, dtype=torch.float)
-        mone = one * -1
-
-        optimizer.zero_grad()
-
-        loss_real = wgan(gt.detach())
-        loss_real = loss_real.mean()
-        loss_real.backward(mone)
-
-        loss_fake = wgan(out.detach())
-        loss_fake = loss_fake.mean()
-        loss_fake.backward(one)
-
-        gradient_penalty = calc_gradient_penalty(wgan, real=gt.detach(), fake=out.detach())
-        gradient_penalty.backward()
-
-        optimizer.step()
-
-    assert not any(p.requires_grad for p in wgan.parameters())
-
-    loss = loss_fake - loss_real + gradient_penalty
-    wasserstein = loss_real - loss_fake
-
-    print(f"{wgan.name}: loss_real = {loss_real}; loss_fake = {loss_fake}; loss = {loss}; wasserstein = {wasserstein}")
-
-
-def calc_gradient_penalty(wgan: Discriminator, real, fake, lambda_: float = 10):
-    assert real.shape[1:] == fake.shape[1:]
-    n, c, h, w = fake.shape
-
-    eta = Uniform(0, 1).sample((n, 1, 1, 1)).expand(n, c, h, w)
-    interpolated = eta * real[-n:] + (1 - eta) * fake
-    interpolated.requires_grad = True
-
-    prob_interpolated = wgan(interpolated)
-
-    grad = torch.autograd.grad(
-        outputs=prob_interpolated,
-        inputs=interpolated,
-        grad_outputs=torch.ones(prob_interpolated.size()),
-        create_graph=True,
-        retain_graph=True,
-        only_inputs=True
-    )[0]
-
-    grad = grad.view(grad.shape[0], -1)
-
-    return ((grad.norm(2, dim=1) - 1) ** 2).mean() * lambda_
+IMG_FOLDER = "data/celeba/img_align_celeba"
 
 
 def main(args):
+    """
+    Run a full training of the MEDFE network.
+    This requires a dataset to be present in IMG_FOLDER.
+    The network also expects smoothed "structure images".
+
+    :param args: Arguments supplied by argparse
+    """
     device_name = 'cpu'
     if args.cuda:
         if not torch.cuda.is_available():
@@ -163,12 +33,22 @@ def main(args):
 
     device = torch.device(device_name)
 
-    img_folder = "data/celeba/img_align_celeba"
-    train_size = args.train_size  # celeba dataset is 202k images large
-    training_set = CustomDataset(img_folder, img_folder+"_tsmooth", train_size)
+    smooth_img_folder = IMG_FOLDER + "_tsmooth"
+    train_size = args.training_size  # celeba dataset is 202k images large
+    training_set = CustomDataset(IMG_FOLDER, smooth_img_folder, train_size)
     train_loader = data.DataLoader(training_set, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    model = MEDFE(branch_channels=256, channels=32).to(device)
+    # configure the network
+    model = MEDFE(
+        batch_norm=True,
+        use_bpa=False,
+        use_branch=True,
+        use_res=True,
+        branch_channels=512//4,
+        channels=64//4
+    ).to(device)
+
+    # set up discriminators and their optimisers
     wgan_global = Discriminator((args.batch_size, 3, 256, 256), name='global')
     wgan_local = None
     if training_set.mask_is_rect():
@@ -188,7 +68,7 @@ def main(args):
     if args.output_intermediates:
         renderer = OutputRenderer(args, model, train_loader)
 
-    for epoch in range(1000000):
+    for epoch in range(100):
         loss = 0
         loss_components = {}
         for batch_idx, batch in enumerate(train_loader):
@@ -199,15 +79,18 @@ def main(args):
             model.set_mask(batch["mask"])
             print(f"Prediction on batch {batch_idx}")
 
+            # get the ground truth image and scale it down
             gt256 = batch["gt"]
             gt32 = interpolate(gt256, 32)
+
+            # feed forward
             out = model(batch["masked_image"])
 
             # only apply out image to masked area
             mask = model.mask.reshape(model.mask.shape[0], 1, model.mask.shape[1], model.mask.shape[2])
             out = (gt256 * mask + out * (1 - mask)).float()
 
-            # Train discriminators
+            # train discriminators
             if wgan_global_real_hist is None:
                 wgan_global_real_hist = gt256
             if wgan_global_real_hist.shape[0] > 4 * args.batch_size:
@@ -225,20 +108,22 @@ def main(args):
                 out_sliced = training_set.slice_mask(out.detach())
                 train_discriminator(wgan_local, wgan_local_optimizer, gt=wgan_local_real_hist, out=out_sliced)
 
+            # determine the loss
             single_loss = criterion(
-                epoch,
-                gt32,
-                batch["gt_smooth"],
-                model.struct_branch_img,
-                model.tex_branch_img,
-                gt256,
-                out,
-                batch['gt_sliced'],
-                out_sliced,
-                256*256 - torch.sum(model.mask[0]),
+                i_gt_small=gt32,
+                i_st=batch["gt_smooth"],
+                i_ost=model.struct_branch_img,
+                i_ote=model.tex_branch_img,
+                i_gt_large=gt256,
+                i_out_large=out,
+                i_gt_sliced=batch['gt_sliced'],
+                i_out_sliced=out_sliced,
+                mask_size=256*256 - torch.sum(model.mask[0]),
             )
+
             single_loss.backward()
             optimiser.step()
+
             loss += single_loss.item()
             for k, v in criterion.last_loss.items():
                 loss_components[k] = loss_components.get(k, 0) + v.item()
@@ -261,9 +146,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Train the image inpainting network')
 
-    parser.add_argument('--train-size', default=5000, type=int, help='the number of images to train with')
-    parser.add_argument('--batch-size', default=50, type=int, help='the number of images to train with in a single batch')
-    parser.add_argument('--learning-rate', default=2e-4, type=float, help='the learning rate')
+    parser.add_argument('--training-size', default=50000, type=int, help='the number of images to training with')
+    parser.add_argument('--batch-size', default=25, type=int, help='the number of images to training with in a single batch')
+    parser.add_argument('--learning-rate', default=1e-3, type=float, help='the learning rate')
     parser.add_argument('--cuda', action='store_true', help='run with CUDA')
     parser.add_argument('--output-intermediates', action='store_true', help='show intermediate results in a GUI window')
 
