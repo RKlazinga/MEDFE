@@ -20,7 +20,7 @@ ENABLED = {
     "reconstruction_texture": True,
     "style": False,
     "perceptual": False,
-    "adversarial": True,
+    "adversarial": False,
 }
 
 to_tensor = transforms.ToTensor()
